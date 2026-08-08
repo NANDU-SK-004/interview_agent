@@ -16,7 +16,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("interview_agent")
 
-app = FastAPI(title="Interview Agent API", version="1.6.0")
+app = FastAPI(title="Interview Agent API", version="1.7.0")
 
 # Enable CORS for frontend integration
 app.add_middleware(
@@ -130,10 +130,18 @@ class Feedback(BaseModel):
     gaps: List[str]
     next: List[str]
 
+class InterviewProgress(BaseModel):
+    current: int
+    total: int
+    day: int
+    topicTitle: str
+
 class InterviewResponse(BaseModel):
     reply: str
     done: bool
     feedback: Optional[Feedback] = None
+    progress: Optional[InterviewProgress] = None
+    answerQuality: Optional[str] = None
 
 
 # Session State Store
@@ -239,7 +247,6 @@ def select_interview_topics(
 def generate_interview_question(topic: Dict[str, Any], candidate: Candidate) -> str:
     """Uses Google's Gemini API to generate a targeted conversational interview question. Resilient to failures."""
     if not GEMINI_API_KEY or not gemini_model:
-        # Fallback to static generic question if API client is not configured
         tools_desc = f" using {', '.join(topic.get('tools', []))}" if topic.get("tools") else ""
         return f"Could you explain your experience working with {topic['title']}{tools_desc} and how you implement it in a project?"
 
@@ -264,7 +271,6 @@ def generate_interview_question(topic: Dict[str, Any], candidate: Candidate) -> 
         return response.text.strip()
     except Exception as e:
         logger.error(f"Error calling Gemini API for question: {e}")
-        # Fallback to static generic question on connection failure
         tools_desc = f" using {', '.join(topic.get('tools', []))}" if topic.get("tools") else ""
         return f"Could you explain your experience working with {topic['title']}{tools_desc} and how you implement it in a project?"
 
@@ -297,7 +303,6 @@ def evaluate_candidate_answer(topic: Dict[str, Any], question: str, answer: str)
         return {"status": status, "reason": reason}
     except Exception as e:
         logger.error(f"Error calling Gemini API for evaluation: {e}")
-        # Default to STRONG on failure to avoid blocking the interview flow
         return {"status": "STRONG", "reason": f"API fallback evaluation due to connection error: {str(e)}"}
 
 
@@ -442,9 +447,19 @@ def handle_interview_turn(request: InterviewRequest):
         # Also log via logger
         logger.info(f"Session {session_id} initialized with {len(selected_topics)} topics for candidate {request.candidate.member.name}.")
 
+        first_topic = selected_topics[0]
+        progress_info = InterviewProgress(
+            current=1,
+            total=len(selected_topics),
+            day=first_topic["day"],
+            topicTitle=first_topic["title"]
+        )
+
         return InterviewResponse(
             reply=f"Welcome, {request.candidate.member.name}. Let's begin your interview.",
-            done=False
+            done=False,
+            progress=progress_info,
+            answerQuality=None
         )
 
     # 2. Existing Session
@@ -464,20 +479,31 @@ def handle_interview_turn(request: InterviewRequest):
     # Allow force-ending the interview via "end"
     if user_msg.lower() == "end":
         logger.info(f"Session {session_id} manually ended by candidate.")
-        return generate_completion_response(session_state)
+        return generate_completion_response(session_state, answer_quality=None)
 
     # Check if we have not asked the question for the current topic yet
     if session_state["current_question_asked"] is None:
-        # Generate and ask the question for topic_queue[current_idx]
         if current_idx < len(topic_queue):
             current_topic = topic_queue[current_idx]
             question = generate_interview_question(current_topic, candidate)
             session_state["current_question_asked"] = question
             session_state["follow_up_asked"] = False
             logger.info(f"Asked primary question for session {session_id}, Day {current_topic['day']}: {question[:60]}...")
-            return InterviewResponse(reply=question, done=False)
+            
+            progress_info = InterviewProgress(
+                current=current_idx + 1,
+                total=len(topic_queue),
+                day=current_topic["day"],
+                topicTitle=current_topic["title"]
+            )
+            return InterviewResponse(
+                reply=question,
+                done=False,
+                progress=progress_info,
+                answerQuality=None
+            )
         else:
-            return generate_completion_response(session_state)
+            return generate_completion_response(session_state, answer_quality=None)
             
     # If a question has already been asked, user_msg is the answer to that question
     else:
@@ -526,7 +552,19 @@ def handle_interview_turn(request: InterviewRequest):
             session_state["current_question_asked"] = follow_up_question
             
             logger.info(f"Asked follow-up question for session {session_id}, Day {current_topic['day']}: {follow_up_question[:60]}...")
-            return InterviewResponse(reply=follow_up_question, done=False)
+            
+            progress_info = InterviewProgress(
+                current=current_idx + 1,
+                total=len(topic_queue),
+                day=current_topic["day"],
+                topicTitle=current_topic["title"]
+            )
+            return InterviewResponse(
+                reply=follow_up_question,
+                done=False,
+                progress=progress_info,
+                answerQuality="shallow"
+            )
             
         # If strong or a follow-up has already been asked, move to the next topic in queue
         else:
@@ -538,21 +576,35 @@ def handle_interview_turn(request: InterviewRequest):
             # Check if queue is completed
             if current_idx >= len(topic_queue):
                 logger.info(f"Session {session_id} completed (all topics covered).")
-                return generate_completion_response(session_state)
+                return generate_completion_response(session_state, answer_quality=status.lower())
                 
             # Ask the primary question for the next topic
             next_topic = topic_queue[current_idx]
             question = generate_interview_question(next_topic, candidate)
             session_state["current_question_asked"] = question
             logger.info(f"Asked primary question for session {session_id}, Day {next_topic['day']}: {question[:60]}...")
-            return InterviewResponse(reply=question, done=False)
+            
+            progress_info = InterviewProgress(
+                current=current_idx + 1,
+                total=len(topic_queue),
+                day=next_topic["day"],
+                topicTitle=next_topic["title"]
+            )
+            return InterviewResponse(
+                reply=question,
+                done=False,
+                progress=progress_info,
+                answerQuality=status.lower()
+            )
 
 
-def generate_completion_response(session_state: Dict[str, Any]) -> InterviewResponse:
+def generate_completion_response(session_state: Dict[str, Any], answer_quality: Optional[str] = None) -> InterviewResponse:
     """Helper to return the final feedback report when the interview finishes."""
     feedback = generate_dynamic_feedback(session_state)
     return InterviewResponse(
         reply="Interview completed. Thank you for your time!",
         done=True,
-        feedback=feedback
+        feedback=feedback,
+        progress=None,
+        answerQuality=answer_quality
     )
