@@ -15,7 +15,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("interview_agent")
 
-app = FastAPI(title="Interview Agent API", version="1.3.0")
+app = FastAPI(title="Interview Agent API", version="1.4.0")
 
 # Enable CORS for frontend integration
 app.add_middleware(
@@ -40,7 +40,7 @@ except Exception as e:
     logger.error(f"Failed to load curriculum.json from {CURRICULUM_PATH}: {e}")
     curriculum_days = {}
 
-# Initialize Gemini Client
+# Initialize Gemini Clients
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 SYSTEM_PROMPT = (
@@ -53,14 +53,27 @@ SYSTEM_PROMPT = (
     "4. Keep it concise, engaging, and focused.\n"
 )
 
+EVALUATION_SYSTEM_PROMPT = (
+    "You are a senior technical interviewer evaluating a candidate's answer to an interview question.\n"
+    "Based on the curriculum topic's objectives and the candidate's response, classify the answer as either:\n"
+    "- STRONG: The answer is complete, accurate, demonstrates real understanding, or provides valid reasoning.\n"
+    "- SHALLOW: The answer is extremely brief, vague, avoids details, or demonstrates a clear lack of depth/understanding.\n\n"
+    "Your response must begin with either 'STRONG' or 'SHALLOW' (case-insensitive) on the first line, followed by a new line with a brief, 1-sentence explanation of why you made this judgment.\n"
+)
+
 if not GEMINI_API_KEY:
     logger.warning("WARNING: GEMINI_API_KEY environment variable is not set. API calls requiring LLM will fail with a configuration error.")
     gemini_model = None
+    gemini_eval_model = None
 else:
     genai.configure(api_key=GEMINI_API_KEY)
     gemini_model = genai.GenerativeModel(
         model_name="gemini-3.5-flash",
         system_instruction=SYSTEM_PROMPT
+    )
+    gemini_eval_model = genai.GenerativeModel(
+        model_name="gemini-3.5-flash",
+        system_instruction=EVALUATION_SYSTEM_PROMPT
     )
 
 # Pydantic Schemas matching spec.md
@@ -113,6 +126,7 @@ class InterviewResponse(BaseModel):
 #     "topic_queue": List[Dict[str, Any]],
 #     "current_index": int,
 #     "current_question_asked": Optional[str],
+#     "follow_up_asked": bool,
 #     "answers_collected": List[Dict[str, Any]]
 # }
 sessions: Dict[str, Dict[str, Any]] = {}
@@ -202,7 +216,7 @@ def select_interview_topics(
 
 
 def generate_interview_question(topic: Dict[str, Any], candidate: Candidate) -> str:
-    """Uses Google's Gemini API (gemini-1.5-flash) to generate a targeted conversational interview question."""
+    """Uses Google's Gemini API (gemini-3.5-flash) to generate a targeted conversational interview question."""
     if not GEMINI_API_KEY or not gemini_model:
         raise HTTPException(
             status_code=500,
@@ -231,8 +245,78 @@ def generate_interview_question(topic: Dict[str, Any], candidate: Candidate) -> 
     except Exception as e:
         logger.error(f"Error calling Gemini API: {e}")
         raise HTTPException(
-            status_code=502,
+            status_code=522,
             detail=f"Error communicating with Gemini API: {str(e)}"
+        )
+
+
+def evaluate_candidate_answer(topic: Dict[str, Any], question: str, answer: str) -> Dict[str, str]:
+    """Evaluates the candidate's answer against the topic objectives. Returns a dict with status and reason."""
+    if not GEMINI_API_KEY or not gemini_eval_model:
+        raise HTTPException(
+            status_code=500,
+            detail="Gemini API key is not configured. Please add GEMINI_API_KEY to your .env file."
+        )
+
+    objectives_str = "\n".join(f"- {obj}" for obj in topic.get("objectives", []))
+    
+    eval_prompt = (
+        f"Topic: {topic['title']}\n"
+        f"Objectives:\n{objectives_str}\n\n"
+        f"Question Asked: {question}\n"
+        f"Candidate's Answer: {answer}\n"
+    )
+
+    try:
+        response = gemini_eval_model.generate_content(eval_prompt)
+        content = response.text.strip().split("\n")
+        status = content[0].strip().upper()
+        reason = "\n".join(content[1:]).strip() if len(content) > 1 else ""
+        
+        # Normalize status to STRONG or SHALLOW
+        if "SHALLOW" in status:
+            status = "SHALLOW"
+        else:
+            status = "STRONG"
+            
+        return {"status": status, "reason": reason}
+    except Exception as e:
+        logger.error(f"Error calling Gemini API for evaluation: {e}")
+        # Default to STRONG on failure to avoid blocking the interview flow
+        return {"status": "STRONG", "reason": f"API error: {str(e)}"}
+
+
+def generate_follow_up_question(topic: Dict[str, Any], candidate: Candidate, previous_question: str, previous_answer: str) -> str:
+    """Generates a deeper, conversational follow-up question on the current topic using context from the previous turn."""
+    if not GEMINI_API_KEY or not gemini_model:
+        raise HTTPException(
+            status_code=500,
+            detail="Gemini API key is not configured. Please add GEMINI_API_KEY to your .env file."
+        )
+
+    objectives_str = "\n".join(f"- {obj}" for obj in topic.get("objectives", []))
+    tools_str = ", ".join(topic.get("tools", []))
+    
+    follow_up_prompt = (
+        f"Candidate Name: {candidate.member.name}\n"
+        f"Job Role: {candidate.member.jobRole}\n"
+        f"Years of Experience: {candidate.member.yearsExperience}\n\n"
+        f"Topic: Day {topic['day']} - {topic['title']}\n"
+        f"Tools covered: {tools_str}\n"
+        f"Objectives: \n{objectives_str}\n\n"
+        f"Previously Asked Question: {previous_question}\n"
+        f"Candidate's Shallow Answer: {previous_answer}\n\n"
+        f"Please generate ONE targeted, conversational, deeper follow-up question about this topic. The question should probe their understanding further, address the gaps in their shallow response, or ask them to elaborate on details."
+    )
+
+    try:
+        response = gemini_model.generate_content(follow_up_prompt)
+        return response.text.strip()
+    except Exception as e:
+        logger.error(f"Error calling Gemini API for follow-up question: {e}")
+        raise HTTPException(
+            status_code=522,
+            detail=f"Error communicating with Gemini API for follow-up: {str(e)}"
         )
 
 
@@ -251,6 +335,7 @@ def handle_interview_turn(request: InterviewRequest):
             "topic_queue": selected_topics,
             "current_index": 0,
             "current_question_asked": None,
+            "follow_up_asked": False,
             "answers_collected": []
         }
 
@@ -296,7 +381,8 @@ def handle_interview_turn(request: InterviewRequest):
             current_topic = topic_queue[current_idx]
             question = generate_interview_question(current_topic, candidate)
             session_state["current_question_asked"] = question
-            logger.info(f"Asked question for session {session_id}, Day {current_topic['day']}: {question[:60]}...")
+            session_state["follow_up_asked"] = False
+            logger.info(f"Asked primary question for session {session_id}, Day {current_topic['day']}: {question[:60]}...")
             return InterviewResponse(reply=question, done=False)
         else:
             return generate_completion_response(session_state)
@@ -306,31 +392,59 @@ def handle_interview_turn(request: InterviewRequest):
         current_topic = topic_queue[current_idx]
         asked_question = session_state["current_question_asked"]
         
-        # Record the answer
+        # Evaluate the answer
+        eval_result = evaluate_candidate_answer(current_topic, asked_question, user_msg)
+        status = eval_result["status"]
+        reason = eval_result["reason"]
+        
+        logger.info(f"Evaluation for session {session_id}, Day {current_topic['day']}: {status}. Reason: {reason}")
+        
+        # Record the transaction
+        is_follow_up = session_state.get("follow_up_asked", False)
         session_state["answers_collected"].append({
             "day": current_topic["day"],
             "title": current_topic["title"],
             "question": asked_question,
-            "answer": user_msg
+            "answer": user_msg,
+            "evaluation": {
+                "status": status,
+                "reason": reason
+            },
+            "type": "follow_up" if is_follow_up else "primary"
         })
-        logger.info(f"Recorded answer for session {session_id}, Day {current_topic['day']}: {user_msg[:60]}...")
         
-        # Progress the queue
-        session_state["current_index"] += 1
-        current_idx = session_state["current_index"]
-        session_state["current_question_asked"] = None  # Reset for next topic
-        
-        # Check if queue is completed
-        if current_idx >= len(topic_queue):
-            logger.info(f"Session {session_id} completed (all topics covered).")
-            return generate_completion_response(session_state)
+        # Decide next step:
+        # If shallow and no follow-up was asked yet on this topic, ask a follow-up
+        if status == "SHALLOW" and not is_follow_up:
+            session_state["follow_up_asked"] = True
             
-        # Generate the next question
-        next_topic = topic_queue[current_idx]
-        question = generate_interview_question(next_topic, candidate)
-        session_state["current_question_asked"] = question
-        logger.info(f"Asked question for session {session_id}, Day {next_topic['day']}: {question[:60]}...")
-        return InterviewResponse(reply=question, done=False)
+            # Generate and ask the follow-up question
+            follow_up_question = generate_follow_up_question(
+                current_topic, candidate, asked_question, user_msg
+            )
+            session_state["current_question_asked"] = follow_up_question
+            
+            logger.info(f"Asked follow-up question for session {session_id}, Day {current_topic['day']}: {follow_up_question[:60]}...")
+            return InterviewResponse(reply=follow_up_question, done=False)
+            
+        # If strong or a follow-up has already been asked, move to the next topic in queue
+        else:
+            session_state["current_index"] += 1
+            current_idx = session_state["current_index"]
+            session_state["current_question_asked"] = None
+            session_state["follow_up_asked"] = False  # Reset for next topic
+            
+            # Check if queue is completed
+            if current_idx >= len(topic_queue):
+                logger.info(f"Session {session_id} completed (all topics covered).")
+                return generate_completion_response(session_state)
+                
+            # Ask the primary question for the next topic
+            next_topic = topic_queue[current_idx]
+            question = generate_interview_question(next_topic, candidate)
+            session_state["current_question_asked"] = question
+            logger.info(f"Asked primary question for session {session_id}, Day {next_topic['day']}: {question[:60]}...")
+            return InterviewResponse(reply=question, done=False)
 
 
 def generate_completion_response(session_state: Dict[str, Any]) -> InterviewResponse:
@@ -339,21 +453,53 @@ def generate_completion_response(session_state: Dict[str, Any]) -> InterviewResp
     answers = session_state["answers_collected"]
     num_answered = len(answers)
     
+    # Inspect the evaluations to build dynamic strengths, gaps and next items
+    strong_topics = []
+    shallow_topics = []
+    
+    for ans in answers:
+        day = ans["day"]
+        title = ans["title"]
+        status = ans["evaluation"]["status"]
+        if status == "STRONG":
+            strong_topics.append(f"Day {day} ({title})")
+        else:
+            shallow_topics.append(f"Day {day} ({title})")
+            
+    # Remove duplicates from topics
+    strong_topics = list(set(strong_topics))
+    shallow_topics = list(set(shallow_topics))
+    
+    summary_text = (
+        f"The candidate {candidate_name} completed the interview session. "
+        f"Answered {num_answered} questions in total across the selected curriculum topics."
+    )
+    
+    strengths_list = [
+        f"Demonstrated solid understanding of {topic}." for topic in strong_topics
+    ]
+    if not strengths_list:
+        strengths_list = ["Demonstrated baseline participation throughout the interview."]
+        
+    gaps_list = [
+        f"Demonstrated shallower understanding or vague responses on {topic}." for topic in shallow_topics
+    ]
+    if not gaps_list:
+        gaps_list = ["No significant technical gaps identified during the session."]
+        
+    next_list = [
+        f"Deep dive into the objectives of {topic}." for topic in shallow_topics
+    ]
+    if not next_list:
+        next_list = ["Ready for the next stage of technical interviews."]
+    
     return InterviewResponse(
         reply="Interview completed. Thank you for your time!",
         done=True,
         feedback=Feedback(
-            summary=f"The candidate {candidate_name} completed the interview session answering {num_answered} topics.",
-            strengths=[
-                "Successfully walked through structured topics from the curriculum.",
-                "Demonstrated consistency in discussing prior experience."
-            ],
-            gaps=[
-                "Probing indicated areas of focus on curriculum days that required multiple attempts."
-            ],
-            next=[
-                "Focus on deepening understanding of topics that required multiple attempts.",
-                "Review the capstone project objectives."
-            ]
+            summary=summary_text,
+            strengths=strengths_list[:3],
+            gaps=gaps_list[:3],
+            next=next_list[:3]
         )
     )
