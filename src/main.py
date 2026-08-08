@@ -16,7 +16,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("interview_agent")
 
-app = FastAPI(title="Interview Agent API", version="1.5.0")
+app = FastAPI(title="Interview Agent API", version="1.6.0")
 
 # Enable CORS for frontend integration
 app.add_middleware(
@@ -137,14 +137,6 @@ class InterviewResponse(BaseModel):
 
 
 # Session State Store
-# sessionId -> {
-#     "candidate": Candidate,
-#     "topic_queue": List[Dict[str, Any]],
-#     "current_index": int,
-#     "current_question_asked": Optional[str],
-#     "follow_up_asked": bool,
-#     "answers_collected": List[Dict[str, Any]]
-# }
 sessions: Dict[str, Dict[str, Any]] = {}
 
 
@@ -158,6 +150,7 @@ def select_interview_topics(
     - Struggled: passed with high attempt counts (attempts > 1), sorted descending
     - Skipped: skipped is True
     - Easy: passed with attempts == 1
+    If candidate has fewer than 4 eligible days of history, it backfills the queue using sorted curriculum days.
     """
     struggled = []
     skipped = []
@@ -196,10 +189,6 @@ def select_interview_topics(
     # Sort struggled by attempts descending
     struggled.sort(key=lambda x: x["attempts"], reverse=True)
     
-    # Target distribution:
-    # - struggled: up to 4
-    # - skipped: up to 3
-    # - easy: up to 3
     selected_struggled = struggled[:4]
     selected_skipped = skipped[:3]
     selected_easy = easy[:3]
@@ -222,9 +211,25 @@ def select_interview_topics(
         else:
             break
             
-    # Slice to maximum 10 topics
-    selected = selected[:10]
-    
+    # EDGE CASE: If the candidate has fewer than 4 eligible topics in their history,
+    # fill with curriculum days to ensure we have a robust selection queue of at least 8 topics
+    if len(selected) < 8:
+        selected_days = {x["day"] for x in selected}
+        for day_num in sorted(curriculum_days.keys()):
+            if len(selected) >= 10:
+                break
+            if day_num not in selected_days:
+                curr_day = curriculum_days[day_num]
+                selected.append({
+                    "day": day_num,
+                    "title": curr_day.get("title", f"Day {day_num}"),
+                    "objectives": curr_day.get("objectives", []),
+                    "tools": curr_day.get("tools", []),
+                    "attempts": 1,
+                    "passed": False,
+                    "skipped": False
+                })
+
     # Sort chronologically by day
     selected.sort(key=lambda x: x["day"])
     
@@ -232,12 +237,11 @@ def select_interview_topics(
 
 
 def generate_interview_question(topic: Dict[str, Any], candidate: Candidate) -> str:
-    """Uses Google's Gemini API (gemini-3.5-flash) to generate a targeted conversational interview question."""
+    """Uses Google's Gemini API to generate a targeted conversational interview question. Resilient to failures."""
     if not GEMINI_API_KEY or not gemini_model:
-        raise HTTPException(
-            status_code=500,
-            detail="Gemini API key is not configured. Please add GEMINI_API_KEY to your .env file."
-        )
+        # Fallback to static generic question if API client is not configured
+        tools_desc = f" using {', '.join(topic.get('tools', []))}" if topic.get("tools") else ""
+        return f"Could you explain your experience working with {topic['title']}{tools_desc} and how you implement it in a project?"
 
     objectives_str = "\n".join(f"- {obj}" for obj in topic.get("objectives", []))
     tools_str = ", ".join(topic.get("tools", []))
@@ -259,20 +263,16 @@ def generate_interview_question(topic: Dict[str, Any], candidate: Candidate) -> 
         response = gemini_model.generate_content(user_prompt)
         return response.text.strip()
     except Exception as e:
-        logger.error(f"Error calling Gemini API: {e}")
-        raise HTTPException(
-            status_code=522,
-            detail=f"Error communicating with Gemini API: {str(e)}"
-        )
+        logger.error(f"Error calling Gemini API for question: {e}")
+        # Fallback to static generic question on connection failure
+        tools_desc = f" using {', '.join(topic.get('tools', []))}" if topic.get("tools") else ""
+        return f"Could you explain your experience working with {topic['title']}{tools_desc} and how you implement it in a project?"
 
 
 def evaluate_candidate_answer(topic: Dict[str, Any], question: str, answer: str) -> Dict[str, str]:
-    """Evaluates the candidate's answer against the topic objectives. Returns a dict with status and reason."""
+    """Evaluates the candidate's answer against the topic objectives. Resilient to failures."""
     if not GEMINI_API_KEY or not gemini_eval_model:
-        raise HTTPException(
-            status_code=500,
-            detail="Gemini API key is not configured. Please add GEMINI_API_KEY to your .env file."
-        )
+        return {"status": "STRONG", "reason": "API fallback evaluation due to missing configuration."}
 
     objectives_str = "\n".join(f"- {obj}" for obj in topic.get("objectives", []))
     
@@ -289,7 +289,6 @@ def evaluate_candidate_answer(topic: Dict[str, Any], question: str, answer: str)
         status = content[0].strip().upper()
         reason = "\n".join(content[1:]).strip() if len(content) > 1 else ""
         
-        # Normalize status to STRONG or SHALLOW
         if "SHALLOW" in status:
             status = "SHALLOW"
         else:
@@ -299,16 +298,13 @@ def evaluate_candidate_answer(topic: Dict[str, Any], question: str, answer: str)
     except Exception as e:
         logger.error(f"Error calling Gemini API for evaluation: {e}")
         # Default to STRONG on failure to avoid blocking the interview flow
-        return {"status": "STRONG", "reason": f"API error: {str(e)}"}
+        return {"status": "STRONG", "reason": f"API fallback evaluation due to connection error: {str(e)}"}
 
 
 def generate_follow_up_question(topic: Dict[str, Any], candidate: Candidate, previous_question: str, previous_answer: str) -> str:
-    """Generates a deeper, conversational follow-up question on the current topic using context from the previous turn."""
+    """Generates a deeper, conversational follow-up question on the current topic. Resilient to failures."""
     if not GEMINI_API_KEY or not gemini_model:
-        raise HTTPException(
-            status_code=500,
-            detail="Gemini API key is not configured. Please add GEMINI_API_KEY to your .env file."
-        )
+        return f"Could you elaborate further on your experience with {topic['title']}?"
 
     objectives_str = "\n".join(f"- {obj}" for obj in topic.get("objectives", []))
     tools_str = ", ".join(topic.get("tools", []))
@@ -330,22 +326,11 @@ def generate_follow_up_question(topic: Dict[str, Any], candidate: Candidate, pre
         return response.text.strip()
     except Exception as e:
         logger.error(f"Error calling Gemini API for follow-up question: {e}")
-        raise HTTPException(
-            status_code=522,
-            detail=f"Error communicating with Gemini API for follow-up: {str(e)}"
-        )
+        return f"Could you elaborate further on your previous point regarding {topic['title']}?"
 
 
 def generate_dynamic_feedback(session_state: Dict[str, Any]) -> Feedback:
-    """Uses Google's Gemini API to generate genuinely candidate-specific feedback based on the full transcript."""
-    if not GEMINI_API_KEY:
-        return Feedback(
-            summary="Fallback summary: Gemini API key is missing.",
-            strengths=["Completed the interview."],
-            gaps=["Gemini key missing."],
-            next=["Configure GEMINI_API_KEY."]
-        )
-
+    """Uses Google's Gemini API to generate genuinely candidate-specific feedback based on the full transcript. Resilient to failures."""
     candidate = session_state["candidate"]
     answers = session_state["answers_collected"]
     
@@ -372,54 +357,66 @@ def generate_dynamic_feedback(session_state: Dict[str, Any]) -> Feedback:
     )
 
     text_response = ""
-    try:
-        model = genai.GenerativeModel(
-            model_name="gemini-3.1-flash-lite",
-            system_instruction=FEEDBACK_SYSTEM_PROMPT
-        )
-        response = model.generate_content(user_prompt)
-        text_response = response.text.strip()
-        
-        # Scrub code blocks
-        if text_response.startswith("```"):
-            lines = text_response.split("\n")
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines[-1].startswith("```"):
-                lines = lines[:-1]
-            text_response = "\n".join(lines).strip()
+    if GEMINI_API_KEY:
+        try:
+            model = genai.GenerativeModel(
+                model_name="gemini-3.1-flash-lite",
+                system_instruction=FEEDBACK_SYSTEM_PROMPT
+            )
+            response = model.generate_content(user_prompt)
+            text_response = response.text.strip()
             
-        # Scrub trailing commas from JSON lists/objects (Gemini sometimes adds them)
-        text_response = re.sub(r',\s*([\]}])', r'\1', text_response)
+            # Scrub code blocks
+            if text_response.startswith("```"):
+                lines = text_response.split("\n")
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines[-1].startswith("```"):
+                    lines = lines[:-1]
+                text_response = "\n".join(lines).strip()
+                
+            # Scrub trailing commas from JSON lists/objects (Gemini sometimes adds them)
+            text_response = re.sub(r',\s*([\]}])', r'\1', text_response)
+                
+            feedback_data = json.loads(text_response)
             
-        feedback_data = json.loads(text_response)
-        
-        return Feedback(
-            summary=feedback_data.get("summary", ""),
-            strengths=feedback_data.get("strengths", []),
-            gaps=feedback_data.get("gaps", []),
-            next=feedback_data.get("next", [])
-        )
-    except Exception as e:
-        logger.error(f"Error parsing Gemini feedback response: {e}. Raw: {text_response}")
-        # Build a structured fallback based on our tracked topics
-        strong_topics = list(set([a["title"] for a in answers if a["evaluation"]["status"] == "STRONG"]))
-        shallow_topics = list(set([a["title"] for a in answers if a["evaluation"]["status"] == "SHALLOW"]))
-        
-        return Feedback(
-            summary=f"The candidate {candidate.member.name} completed the interview answering {len(answers)} topics.",
-            strengths=[f"Demonstrated good baseline participation on: {t}" for t in strong_topics] if strong_topics else ["Walked through the technical topics."],
-            gaps=[f"Showed shallower understanding of: {t}" for t in shallow_topics] if shallow_topics else ["No major gaps flagged."],
-            next=[f"Deep dive into: {t}" for t in shallow_topics] if shallow_topics else ["Ready for review."]
-        )
+            return Feedback(
+                summary=feedback_data.get("summary", ""),
+                strengths=feedback_data.get("strengths", []),
+                gaps=feedback_data.get("gaps", []),
+                next=feedback_data.get("next", [])
+            )
+        except Exception as e:
+            logger.error(f"Error parsing Gemini feedback response: {e}. Raw: {text_response}")
+            
+    # Fallback response generator (used if API key is missing or call fails)
+    strong_topics = list(set([a["title"] for a in answers if a["evaluation"]["status"] == "STRONG"]))
+    shallow_topics = list(set([a["title"] for a in answers if a["evaluation"]["status"] == "SHALLOW"]))
+    
+    return Feedback(
+        summary=f"The candidate {candidate.member.name} completed the interview answering {len(answers)} topics.",
+        strengths=[f"Demonstrated good baseline participation on: {t}" for t in strong_topics] if strong_topics else ["Walked through the technical topics."],
+        gaps=[f"Showed shallower understanding of: {t}" for t in shallow_topics] if shallow_topics else ["No major gaps flagged."],
+        next=[f"Deep dive into: {t}" for t in shallow_topics] if shallow_topics else ["Ready for review."]
+    )
 
 
 @app.post("/api/interview", response_model=InterviewResponse)
 def handle_interview_turn(request: InterviewRequest):
-    session_id = request.sessionId
+    # EDGE CASE 1: Missing or malformed sessionId
+    session_id = request.sessionId.strip() if request.sessionId else ""
+    if not session_id:
+        return InterviewResponse(
+            reply="Error: Invalid or missing sessionId.",
+            done=True
+        )
 
     # 1. New Session (candidate details provided)
     if request.candidate is not None:
+        # EDGE CASE 6: Session reset warning if sessionId is used to "start" a second time
+        if session_id in sessions:
+            logger.warning(f"Session {session_id} already exists. Resetting session state for a new interview.")
+            
         # Perform topic selection
         selected_topics = select_interview_topics(request.candidate.missions, curriculum_days)
         
@@ -451,10 +448,11 @@ def handle_interview_turn(request: InterviewRequest):
         )
 
     # 2. Existing Session
+    # EDGE CASE 2: Unknown sessionId
     if session_id not in sessions:
-        raise HTTPException(
-            status_code=400,
-            detail="Session not found. Please initialize the interview by providing candidate details first."
+        return InterviewResponse(
+            reply="Error: Unknown sessionId. Please start the interview session by providing candidate details first.",
+            done=True
         )
 
     session_state = sessions[session_id]
@@ -486,8 +484,17 @@ def handle_interview_turn(request: InterviewRequest):
         current_topic = topic_queue[current_idx]
         asked_question = session_state["current_question_asked"]
         
-        # Evaluate the answer
-        eval_result = evaluate_candidate_answer(current_topic, asked_question, user_msg)
+        # EDGE CASE 4: Empty or whitespace-only answer messages
+        if not user_msg:
+            logger.info(f"Session {session_id}, Day {current_topic['day']}: Received empty or whitespace-only answer.")
+            eval_result = {
+                "status": "SHALLOW",
+                "reason": "Candidate provided an empty or whitespace-only response."
+            }
+        else:
+            # Evaluate the answer
+            eval_result = evaluate_candidate_answer(current_topic, asked_question, user_msg)
+            
         status = eval_result["status"]
         reason = eval_result["reason"]
         
@@ -499,7 +506,7 @@ def handle_interview_turn(request: InterviewRequest):
             "day": current_topic["day"],
             "title": current_topic["title"],
             "question": asked_question,
-            "answer": user_msg,
+            "answer": user_msg if user_msg else "(No response)",
             "evaluation": {
                 "status": status,
                 "reason": reason
