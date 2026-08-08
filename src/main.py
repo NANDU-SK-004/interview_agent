@@ -15,7 +15,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("interview_agent")
 
-app = FastAPI(title="Interview Agent API", version="1.4.0")
+app = FastAPI(title="Interview Agent API", version="1.5.0")
 
 # Enable CORS for frontend integration
 app.add_middleware(
@@ -61,6 +61,21 @@ EVALUATION_SYSTEM_PROMPT = (
     "Your response must begin with either 'STRONG' or 'SHALLOW' (case-insensitive) on the first line, followed by a new line with a brief, 1-sentence explanation of why you made this judgment.\n"
 )
 
+FEEDBACK_SYSTEM_PROMPT = (
+    "You are a senior technical interviewer compiling a final evaluation report for an AI/software engineering candidate.\n"
+    "Based on the full transcript of the interview (topics, questions asked, and candidate answers), you must produce a detailed, candidate-specific feedback report.\n"
+    "Your response must be a single, valid JSON object containing exactly the following keys:\n"
+    "{\n"
+    "  \"summary\": \"A concise 2-3 sentence overview of their overall performance and suitability, referencing their actual answers.\",\n"
+    "  \"strengths\": [\"List of 2-3 specific technical areas or concepts they demonstrated solid mastery in, referencing details from their answers.\"],\n"
+    "  \"gaps\": [\"List of 2-3 specific technical gaps, misconceptions, or areas they struggled to elaborate on, based on their answers.\"],\n"
+    "  \"next\": [\"List of 2-3 concrete, actionable next steps or learning suggestions tailored to their performance.\"]\n"
+    "}\n\n"
+    "Guidelines:\n"
+    "1. Do NOT use boilerplate or generic sentences like 'Demonstrated baseline participation'. Mention specific concepts they discussed (e.g. Reciprocal Rank Fusion, all-MiniLM-L6-v2, ChromaDB, etc.).\n"
+    "2. Output ONLY the JSON object. Do not include any markdown fences, explanation text, or preambles. Output clean JSON."
+)
+
 if not GEMINI_API_KEY:
     logger.warning("WARNING: GEMINI_API_KEY environment variable is not set. API calls requiring LLM will fail with a configuration error.")
     gemini_model = None
@@ -68,11 +83,11 @@ if not GEMINI_API_KEY:
 else:
     genai.configure(api_key=GEMINI_API_KEY)
     gemini_model = genai.GenerativeModel(
-        model_name="gemini-3.5-flash",
+        model_name="gemini-3.1-flash-lite",
         system_instruction=SYSTEM_PROMPT
     )
     gemini_eval_model = genai.GenerativeModel(
-        model_name="gemini-3.5-flash",
+        model_name="gemini-3.1-flash-lite",
         system_instruction=EVALUATION_SYSTEM_PROMPT
     )
 
@@ -320,6 +335,81 @@ def generate_follow_up_question(topic: Dict[str, Any], candidate: Candidate, pre
         )
 
 
+def generate_dynamic_feedback(session_state: Dict[str, Any]) -> Feedback:
+    """Uses Google's Gemini API to generate genuinely candidate-specific feedback based on the full transcript."""
+    if not GEMINI_API_KEY:
+        return Feedback(
+            summary="Fallback summary: Gemini API key is missing.",
+            strengths=["Completed the interview."],
+            gaps=["Gemini key missing."],
+            next=["Configure GEMINI_API_KEY."]
+        )
+
+    candidate = session_state["candidate"]
+    answers = session_state["answers_collected"]
+    
+    # Format the transcript clearly
+    transcript_lines = []
+    for idx, ans in enumerate(answers):
+        q_type = "Follow-up" if ans.get("type") == "follow_up" else "Primary"
+        transcript_lines.append(
+            f"Turn {idx + 1} [{ans['title']} - {q_type} Question]:\n"
+            f"Question Asked: {ans['question']}\n"
+            f"Candidate Answer: {ans['answer']}\n"
+            f"Evaluation: {ans['evaluation']['status']}\n"
+        )
+    
+    transcript_str = "\n".join(transcript_lines)
+    
+    user_prompt = (
+        f"Candidate Name: {candidate.member.name}\n"
+        f"Job Role: {candidate.member.jobRole}\n"
+        f"Years of Experience: {candidate.member.yearsExperience}\n\n"
+        f"Interview Transcript:\n"
+        f"{transcript_str}\n\n"
+        f"Please generate the feedback JSON matching the requested keys."
+    )
+
+    text_response = ""
+    try:
+        model = genai.GenerativeModel(
+            model_name="gemini-3.1-flash-lite",
+            system_instruction=FEEDBACK_SYSTEM_PROMPT
+        )
+        response = model.generate_content(user_prompt)
+        text_response = response.text.strip()
+        
+        # Scrub code blocks
+        if text_response.startswith("```"):
+            lines = text_response.split("\n")
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines[-1].startswith("```"):
+                lines = lines[:-1]
+            text_response = "\n".join(lines).strip()
+            
+        feedback_data = json.loads(text_response)
+        
+        return Feedback(
+            summary=feedback_data.get("summary", ""),
+            strengths=feedback_data.get("strengths", []),
+            gaps=feedback_data.get("gaps", []),
+            next=feedback_data.get("next", [])
+        )
+    except Exception as e:
+        logger.error(f"Error parsing Gemini feedback response: {e}. Raw: {text_response}")
+        # Build a structured fallback based on our tracked topics
+        strong_topics = list(set([a["title"] for a in answers if a["evaluation"]["status"] == "STRONG"]))
+        shallow_topics = list(set([a["title"] for a in answers if a["evaluation"]["status"] == "SHALLOW"]))
+        
+        return Feedback(
+            summary=f"The candidate {candidate.member.name} completed the interview answering {len(answers)} topics.",
+            strengths=[f"Demonstrated good baseline participation on: {t}" for t in strong_topics] if strong_topics else ["Walked through the technical topics."],
+            gaps=[f"Showed shallower understanding of: {t}" for t in shallow_topics] if shallow_topics else ["No major gaps flagged."],
+            next=[f"Deep dive into: {t}" for t in shallow_topics] if shallow_topics else ["Ready for review."]
+        )
+
+
 @app.post("/api/interview", response_model=InterviewResponse)
 def handle_interview_turn(request: InterviewRequest):
     session_id = request.sessionId
@@ -449,57 +539,9 @@ def handle_interview_turn(request: InterviewRequest):
 
 def generate_completion_response(session_state: Dict[str, Any]) -> InterviewResponse:
     """Helper to return the final feedback report when the interview finishes."""
-    candidate_name = session_state["candidate"].member.name
-    answers = session_state["answers_collected"]
-    num_answered = len(answers)
-    
-    # Inspect the evaluations to build dynamic strengths, gaps and next items
-    strong_topics = []
-    shallow_topics = []
-    
-    for ans in answers:
-        day = ans["day"]
-        title = ans["title"]
-        status = ans["evaluation"]["status"]
-        if status == "STRONG":
-            strong_topics.append(f"Day {day} ({title})")
-        else:
-            shallow_topics.append(f"Day {day} ({title})")
-            
-    # Remove duplicates from topics
-    strong_topics = list(set(strong_topics))
-    shallow_topics = list(set(shallow_topics))
-    
-    summary_text = (
-        f"The candidate {candidate_name} completed the interview session. "
-        f"Answered {num_answered} questions in total across the selected curriculum topics."
-    )
-    
-    strengths_list = [
-        f"Demonstrated solid understanding of {topic}." for topic in strong_topics
-    ]
-    if not strengths_list:
-        strengths_list = ["Demonstrated baseline participation throughout the interview."]
-        
-    gaps_list = [
-        f"Demonstrated shallower understanding or vague responses on {topic}." for topic in shallow_topics
-    ]
-    if not gaps_list:
-        gaps_list = ["No significant technical gaps identified during the session."]
-        
-    next_list = [
-        f"Deep dive into the objectives of {topic}." for topic in shallow_topics
-    ]
-    if not next_list:
-        next_list = ["Ready for the next stage of technical interviews."]
-    
+    feedback = generate_dynamic_feedback(session_state)
     return InterviewResponse(
         reply="Interview completed. Thank you for your time!",
         done=True,
-        feedback=Feedback(
-            summary=summary_text,
-            strengths=strengths_list[:3],
-            gaps=gaps_list[:3],
-            next=next_list[:3]
-        )
+        feedback=feedback
     )
