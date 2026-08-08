@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import logging
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException
@@ -387,6 +388,9 @@ def generate_dynamic_feedback(session_state: Dict[str, Any]) -> Feedback:
             if lines[-1].startswith("```"):
                 lines = lines[:-1]
             text_response = "\n".join(lines).strip()
+            
+        # Scrub trailing commas from JSON lists/objects (Gemini sometimes adds them)
+        text_response = re.sub(r',\s*([\]}])', r'\1', text_response)
             
         feedback_data = json.loads(text_response)
         
