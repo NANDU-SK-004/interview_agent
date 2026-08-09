@@ -202,3 +202,19 @@ Requirements:
 6. Keep all existing functionality exactly as-is (progress bar, quality tags, typing animation, radar chart, PDF export, hint button, end interview button) — this is a visual theme change only, not a functional change.
 
 Show me a screenshot or description of the candidate list screen and the feedback report screen after the change so I can review.
+
+
+
+The written feedback report (summary/strengths/gaps/next) is accurate and correctly reflects the transcript. However, the Curriculum Competency Mapping chart is completely disconnected from reality:
+- It's missing "Embeddings Explained" even though it was the first topic covered
+- It shows "Vector Databases Overview" at 100% even though the candidate gave a factually WRONG answer there
+- It shows "Prompt Engineering Fundamentals" at 100% even though that topic was never discussed in this session
+
+Find where the chart's per-topic scores are calculated and show me that code. It's clearly not using the same answerQuality/transcript data that the written feedback correctly uses. Fix the chart to:
+1. Only show topics that were actually covered in this session's transcript
+2. Score each topic based on its actual answerQuality: strong = high score (e.g. 85-100%), shallow = medium score (e.g. 40-60%), wrong = low score (e.g. 10-25%)
+3. Pull topic names directly from the same session data the feedback text generator uses, not a separate/stale source
+
+Also fix the PDF export header to say "SkillHire" only, not "SkillHire - Candidate Assessment Hub" — match the current rebrand everywhere including this template.
+
+After fixing, re-run the same test session data (or a new test) and show me the corrected chart alongside the written feedback so I can confirm they now agree with each other.
