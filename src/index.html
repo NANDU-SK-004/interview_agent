@@ -1064,7 +1064,7 @@
 
                 // Start the interview first question trigger
                 showTypingIndicator();
-                const initRes = await fetch('http://127.0.0.1:8000/api/interview', {
+                const initRes = await fetch('/api/interview', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
