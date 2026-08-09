@@ -20,10 +20,13 @@ logger = logging.getLogger("interview_agent")
 
 app = FastAPI(title="Interview Agent API", version="1.8.0")
 
-# Enable CORS for frontend integration
+# Enable CORS with allowed origins from environment variables, defaulting to local dev server
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "http://localhost:8000")
+allowed_origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -119,8 +122,8 @@ class CandidateSignals(BaseModel):
 
 class Candidate(BaseModel):
     member: CandidateMember
-    missions: List[CandidateMission]
-    signals: CandidateSignals
+    missions: Optional[List[CandidateMission]] = None
+    signals: Optional[CandidateSignals] = None
 
 class InterviewRequest(BaseModel):
     sessionId: str
@@ -496,6 +499,17 @@ def is_exit_intent(message: str) -> bool:
 
 @app.post("/api/interview", response_model=InterviewResponse)
 def handle_interview_turn(request: InterviewRequest):
+    try:
+        return _process_interview_turn(request)
+    except Exception as e:
+        logger.exception(f"Unhandled error in /api/interview: {e}")
+        return InterviewResponse(
+            reply="An internal server error occurred. Please try again or restart the session.",
+            done=True
+        )
+
+
+def _process_interview_turn(request: InterviewRequest) -> InterviewResponse:
     # EDGE CASE 1: Missing or malformed sessionId
     session_id = request.sessionId.strip() if request.sessionId else ""
     if not session_id:
@@ -509,12 +523,36 @@ def handle_interview_turn(request: InterviewRequest):
         if session_id in sessions:
             logger.warning(f"Session {session_id} already exists. Resetting session state for a new interview.")
             
-        # Perform topic selection
-        selected_topics = select_interview_topics(request.candidate.missions, curriculum_days)
+        candidate_obj = request.candidate
+        # Check if the candidate's missions are missing in the request, and load them locally from server JSON
+        if not candidate_obj.missions or not candidate_obj.signals:
+            candidates_path = os.path.join(BASE_DIR, "data", "candidates.json")
+            try:
+                with open(candidates_path, "r", encoding="utf-8") as f:
+                    local_data = json.load(f)
+                matched = next((c for c in local_data.get("candidates", []) if c["member"]["id"] == candidate_obj.member.id), None)
+                if matched:
+                    # Reconstruct full Candidate object with private missions and signals loaded locally on the server
+                    candidate_obj = Candidate(
+                        member=CandidateMember(**matched["member"]),
+                        missions=[CandidateMission(**m) for m in matched["missions"]],
+                        signals=CandidateSignals(**matched["signals"])
+                    )
+                else:
+                    logger.warning(f"Candidate ID {candidate_obj.member.id} not found in database. Using empty defaults.")
+                    candidate_obj.missions = []
+                    candidate_obj.signals = CandidateSignals(commitDays=0, missionsCompleted=0, missionsFirstTry=0)
+            except Exception as e:
+                logger.error(f"Error reading local candidate database: {e}")
+                candidate_obj.missions = []
+                candidate_obj.signals = CandidateSignals(commitDays=0, missionsCompleted=0, missionsFirstTry=0)
+
+        # Perform topic selection using full candidate missions list loaded on the server
+        selected_topics = select_interview_topics(candidate_obj.missions, curriculum_days)
         
         # Initialize session state
         sessions[session_id] = {
-            "candidate": request.candidate,
+            "candidate": candidate_obj,
             "topic_queue": selected_topics,
             "current_index": 0,
             "current_question_asked": None,
@@ -783,9 +821,33 @@ def generate_completion_response(session_state: Dict[str, Any], answer_quality: 
     )
 
 
-# Serve static data folder
-app.mount("/data", StaticFiles(directory=os.path.join(BASE_DIR, "data")), name="data")
+# Serve static content (exposing /static for SkillHire logo images only)
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "src", "static")), name="static")
+
+@app.get("/api/candidates")
+def get_candidates():
+    """Secure endpoint returning only safe candidate public metadata."""
+    try:
+        candidates_path = os.path.join(BASE_DIR, "data", "candidates.json")
+        with open(candidates_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        safe_list = []
+        for c in data.get("candidates", []):
+            safe_list.append({
+                "member": {
+                    "id": c["member"]["id"],
+                    "name": c["member"]["name"],
+                    "jobRole": c["member"]["jobRole"],
+                    "yearsExperience": c["member"]["yearsExperience"],
+                    "education": c["member"]["education"],
+                    "status": c["member"]["status"]
+                }
+            })
+        return {"candidates": safe_list}
+    except Exception as e:
+        logger.error(f"Error loading candidates database: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load candidates list.")
 
 # Serve index.html SPA
 @app.get("/")

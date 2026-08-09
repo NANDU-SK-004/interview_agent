@@ -966,13 +966,13 @@
             }, 2000);
 
             try {
-                const response = await fetch('data/candidates.json');
+                const response = await fetch('/api/candidates');
                 const data = await response.json();
                 candidatesList = data.candidates || [];
                 renderCandidates();
             } catch (err) {
                 console.error("Failed to load candidates:", err);
-                alert("Error: Failed to fetch candidates.json. Ensure the server is running.");
+                alert("Error: Failed to fetch candidates from api. Ensure the server is running.");
             }
         });
 

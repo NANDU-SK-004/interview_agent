@@ -218,3 +218,47 @@ Find where the chart's per-topic scores are calculated and show me that code. It
 Also fix the PDF export header to say "SkillHire" only, not "SkillHire - Candidate Assessment Hub" — match the current rebrand everywhere including this template.
 
 After fixing, re-run the same test session data (or a new test) and show me the corrected chart alongside the written feedback so I can confirm they now agree with each other.
+
+
+## Prompt — Security & exposure audit
+Act as a security reviewer. Audit this entire codebase and git history for anything that should NOT be exposed in a PUBLIC GitHub repository or a public live demo. Specifically check for:
+
+1. API KEYS / SECRETS:
+   - Is GEMINI_API_KEY (or any other key) hardcoded anywhere in the source code instead of read from environment variables?
+   - Is .env actually listed in .gitignore, and has it ever been committed in git history (check git log for it, not just the current state)?
+   - Does .env.example contain a real key by mistake, or just a placeholder?
+
+2. DEBUG/INTERNAL INFO LEAKAGE:
+   - Do any error responses return raw stack traces, internal file paths, or Python exception details to the client instead of clean error messages?
+   - Is DEBUG mode or verbose logging enabled in a way that would expose internals in production?
+   - Are there any print()/console.log() statements left in that dump sensitive session data, candidate PII, or internal state to logs that might be publicly visible (e.g. Render's log viewer)?
+
+3. CORS / ACCESS CONTROL:
+   - Is CORS configured too permissively (e.g. allow_origins=["*"]) in a way that's riskier than necessary?
+   - Is there any endpoint besides /api/interview that's unintentionally exposed (e.g. a debug/test route left in)?
+
+4. DATA EXPOSURE:
+   - Does any response ever leak full session state, other candidates' data, or internal server config that a client shouldn't see?
+   - Is candidates.json or curriculum.json served in a way that exposes more than intended (e.g. a raw static file listing)?
+
+5. GIT HISTORY:
+   - Search the full git history (not just current files) for any commit that ever included a real API key, even if it was later removed — this matters because it's still recoverable from history even after deletion.
+
+Report EVERY finding clearly, even minor ones, and tell me exactly what to fix for each one before I deploy and make this repo public.
+
+## Apply these security fixes from the audit:
+
+1. Remove the static file mount that exposes the raw candidates.json file publicly:
+   app.mount("/data", StaticFiles(directory=os.path.join(BASE_DIR, "data")), name="data")
+   Replace it with a proper FastAPI route GET /api/candidates that returns ONLY safe public fields (id, name, jobRole) — not attempt counts, skipped days, or any struggle/performance data. Update the frontend to fetch candidates from this new /api/candidates endpoint instead of directly reading data/candidates.json.
+
+2. Wrap the entire /api/interview endpoint logic in a try/except that catches any unhandled exception, logs it server-side, and returns a clean generic error response (reply: "An internal server error occurred", done: true) instead of ever leaking a raw stack trace or file path to the client.
+
+3. Update CORS to read allowed origins from an environment variable (ALLOWED_ORIGINS) instead of allowing "*", defaulting to http://localhost:8000 for local dev. I'll set the real production origin once deployed.
+
+4. Update .gitignore to include: __pycache__/, *.pyc, *.pyo, *.pyd, .pytest_cache/, .vscode/, .idea/ (in addition to the existing .env entry).
+
+After making these changes, confirm:
+- The frontend still works correctly using the new /api/candidates endpoint (no functionality broken)
+- Deliberately trigger an unhandled error and confirm it returns a clean message, not a stack trace
+- Show me the final CORS config
