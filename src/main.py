@@ -391,6 +391,25 @@ def generate_dynamic_feedback(session_state: Dict[str, Any]) -> Feedback:
     
     transcript_str = "\n".join(transcript_lines)
     
+    # Print transcript details to the terminal console
+    print("\n" + "=" * 20 + " TRANSCRIPT SENT TO GEMINI " + "=" * 20)
+    print(f"Candidate: {candidate.member.name} ({candidate.member.jobRole})")
+    print(f"Total Technical Answers: {len(answers)}")
+    print("Transcript Content:")
+    print(transcript_str if transcript_str else "(No technical answers recorded)")
+    print("=" * 67 + "\n")
+
+    # Bypass Gemini call if no technical answers were collected
+    if len(answers) == 0:
+        logger.info("Bypassing Gemini call: Candidate ended the session before any technical questions could be answered.")
+        summary_txt = f"The interview was ended early by candidate {candidate.member.name} before any technical assessment could occur."
+        return Feedback(
+            summary=summary_txt,
+            strengths=["Insufficient responses to assess strengths."],
+            gaps=["Insufficient responses to assess gaps."],
+            next=["Retake the technical interview and complete the curriculum topics."]
+        )
+    
     user_prompt = (
         f"Candidate Name: {candidate.member.name}\n"
         f"Job Role: {candidate.member.jobRole}\n"

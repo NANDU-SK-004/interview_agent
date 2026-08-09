@@ -164,3 +164,14 @@ OTHER UI ADDITIONS:
 4. Keep the progress bar, chat bubbles, typing animation, radar chart, and PDF export exactly as-is — this is a polish/rebrand pass, not a redesign.
 
 Keep everything minimal, clean, and consistent with the existing dark teal color palette (#031716, #032F30, #0A7075, #0C969C, #6BA3BE, #274D60).
+
+
+There's a critical bug: when a candidate says "I want to leave" or similar exit phrases immediately at the start of the interview (before answering ANY real technical question), the final feedback report is still generating detailed, specific technical strengths/gaps (e.g. about LSM-trees, concurrency control) that have NO basis in the actual transcript — this looks like Gemini is hallucinating content instead of acknowledging an empty/near-empty transcript.
+
+Fix this by:
+1. Before generating final feedback, check the actual transcript length. If zero or near-zero real technical answers were given (e.g. only the friendly opening was answered, or nothing at all), do NOT call Gemini to generate detailed strengths/gaps about specific technical topics.
+2. In this case, return an honest, minimal feedback object instead: summary should clearly state the interview was ended before any meaningful technical assessment could occur, strengths and gaps should be empty arrays or contain a single honest note like "Insufficient responses to assess", and next should suggest retaking the interview.
+3. Also double check: is session state being properly isolated per sessionId, or could a new session accidentally reuse/leak data from a previous session? Verify and fix if there's any cross-contamination.
+4. Show me the exact transcript data being sent to Gemini for feedback generation in this early-exit scenario so I can confirm what's actually happening.
+
+Test this exact scenario: start a new session, immediately send "I want to leave" as the very first message (before answering the friendly opening question), and show me the resulting feedback response.
