@@ -92,3 +92,50 @@ Extend the /api/interview response to include additional optional metadata field
 2. "answerQuality": "strong" | "shallow" | null — the evaluation result for the most recent answer (null on the very first "start" request since there's no answer yet)
 
 These are additive fields only — the core required response shape must remain fully intact and backward compatible with the spec.
+
+
+## Frontend: single-page HTML/JS chat interface
+Build a single-page HTML/JS frontend (one file, no build step) for the Interview Agent. Requirements:
+
+FUNCTIONALITY:
+1. On load, fetch candidates from data/candidates.json and show them in a selectable list (name + jobRole).
+2. "Start Interview" button sends the selected candidate to /api/interview with a generated sessionId.
+3. Chat interface: agent questions on one side, my typed answers on the other, auto-scrolling.
+4. Text input + send button for answers, calling /api/interview with the same sessionId each turn.
+5. Progress bar at the top showing "Topic {progress.current}/{progress.total}: Day {progress.day} - {progress.topicTitle}" using the progress field from the API.
+6. After each of my answers, briefly show a small tag near my message using answerQuality: "✓ Strong answer" (green) or "→ Follow-up incoming" (amber), then transition to the agent's next message.
+7. Typing animation: while waiting for the agent's response, show an animated "..." typing indicator bubble before the real message appears. When the question arrives, reveal it with a smooth fade/slide-in effect (keep it lightweight, don't overdo character-by-character rendering).
+8. When done: true arrives, hide the chat input and show:
+   a. The feedback (summary, strengths, gaps, next) as a clean formatted report
+   b. A simple radar or bar chart (use plain SVG or Canvas, no external chart library) visualizing performance across the topics/days covered — derive rough per-topic scores from how many topics had answerQuality "strong" vs "shallow" during the session
+   c. A "Download Report as PDF" button that generates a clean printable PDF of the feedback (use window.print() with print-specific CSS, or a lightweight approach — no heavy PDF library needed)
+
+DESIGN — use this exact color palette:
+- #031716 - darkest background (page background)
+- #032F30 - secondary dark surface (sidebar/header)
+- #0A7075 - primary accent (buttons, active states, progress bar fill)
+- #0C969C - secondary accent (agent message bubbles, chart highlights)
+- #6BA3BE - muted light accent (candidate answer bubbles, borders)
+- #274D60 - mid-tone (cards, containers)
+
+Clean modern sans-serif font, generous spacing, rounded corners on chat bubbles/cards, subtle shadows and smooth transitions. One HTML file with embedded CSS/JS, no external frameworks required except vanilla fetch() calls to the backend.
+
+## Fix several issues in the interview evaluation and flow logic:
+
+1. EVALUATION BUG: Gibberish/nonsense answers (e.g. "ccc", "asdf") are incorrectly being classified as "strong". Fix the evaluation prompt sent to Gemini so it explicitly checks whether the answer contains genuine, relevant technical content. Gibberish, off-topic, or empty-of-substance answers must be classified as "shallow" and trigger a follow-up.
+
+2. WRONG ANSWERS SHOULD SHOW AS GAPS: Currently, even factually incorrect technical answers can end up looking fine in the final feedback. The evaluation must distinguish between "shallow" (vague/incomplete) and factually WRONG answers. Track this distinction in session state, and make sure the final feedback report explicitly and precisely calls out factually incorrect answers as gaps — not just vague ones. Feedback should be clear and precise about WHAT was wrong, not generic.
+
+3. FRIENDLY OPENING: The interview should start with 1-2 light, friendly, non-technical questions first (e.g. "Tell me a bit about your background and what you enjoyed most in the cohort") before transitioning into the technical curriculum questions. Only after this warm-up should it move into the Day-by-Day technical topics.
+
+4. HINTS ON DELAY: If the candidate takes unusually long to respond (implement this as: if the frontend reports elapsed time since the question was shown, pass that to the backend), OR if requested via a "hint" flag from the frontend, generate a helpful hint related to the current question (not the answer itself, just a nudge in the right direction) instead of leaving them stuck. Add support for this via an optional "requestHint": true field in the request.
+
+5. GRACEFUL EXIT: Detect when a candidate's message expresses intent to quit/end the interview (phrases like "quit", "end interview", "stop", "I want to leave"). When detected, immediately end the session gracefully: return done: true with feedback generated from the transcript so far (even if only 1-2 topics were covered), clearly noting in the summary that the interview was ended early. Do not evaluate the exit message itself as a technical answer.
+
+After implementing all of this, test and show me results for:
+- A nonsense answer ("ccc") → should be shallow
+- A confidently WRONG technical answer → should show as a specific gap in feedback, not pass as strong
+- The interview opening — confirm it starts friendly before going technical
+- Typing "I want to end the interview" mid-session → should exit gracefully with partial feedback
+- A hint request on a question → should return a helpful nudge, not the answer
+
