@@ -100,12 +100,88 @@
             transform: translateY(0);
         }
 
+        /* Entry Portal Screen Styling */
+        .entry-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: var(--bg-darkest);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            transition: opacity 0.4s ease-out;
+        }
+
+        .entry-card {
+            background-color: var(--bg-main);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 32px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        .entry-logo-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 16px;
+            text-align: left;
+        }
+
+        .input-group label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-light);
+        }
+
+        .input-group input {
+            padding: 10px 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-family: var(--font-family);
+            font-size: 14px;
+            color: var(--text-light);
+            background-color: var(--bg-main);
+            outline: none;
+            transition: var(--transition);
+        }
+
+        .input-group input:focus {
+            border-color: var(--primary-accent);
+        }
+
+        .entry-error {
+            color: var(--danger);
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 12px;
+            display: none;
+            text-align: center;
+        }
+
         /* Sidebar Styling */
         .sidebar {
             width: 320px;
             background-color: var(--bg-surface);
             border-right: 1px solid var(--mid-tone);
-            display: flex;
+            display: none; /* Changed from flex */
             flex-direction: column;
             padding: 24px;
             flex-shrink: 0;
@@ -245,7 +321,7 @@
         /* Main Window Panel */
         .main-panel {
             flex-grow: 1;
-            display: flex;
+            display: none; /* Changed from flex to hide initially */
             flex-direction: column;
             position: relative;
             background-color: var(--bg-main);
@@ -708,7 +784,7 @@
                 height: auto !important;
             }
 
-            .sidebar, .progress-header, .chat-container, .input-bar, .report-actions {
+            .sidebar, .progress-header, .chat-container, .input-bar, .report-actions, .entry-screen {
                 display: none !important;
             }
 
@@ -802,6 +878,33 @@
             <img src="static/logo.png" alt="SkillHire Logo" style="width: 100%; height: 100%; object-fit: contain;">
         </div>
         <div class="splash-text" id="splashText">SkillHire</div>
+    </div>
+
+    <!-- Candidate Entry Portal Screen -->
+    <div class="entry-screen" id="entryScreen" style="display: none;">
+        <div class="entry-card">
+            <div class="entry-logo-container">
+                <img src="static/logo.png" alt="SkillHire Logo" style="width: 48px; height: 48px; border-radius: 10px; border: 1px solid var(--border-color); object-fit: cover;">
+                <h2 style="font-weight: 700; color: var(--text-light); font-size: 24px;">SkillHire</h2>
+            </div>
+            <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 20px; text-align: center;">Please enter your credentials to access the assessment portal.</p>
+            
+            <div class="input-group">
+                <label for="entryName">Your Name</label>
+                <input type="text" id="entryName" placeholder="e.g. Sarah" autocomplete="off">
+            </div>
+            
+            <div class="input-group">
+                <label for="entryId">Candidate ID</label>
+                <input type="text" id="entryId" placeholder="e.g. CAND-001" autocomplete="off">
+            </div>
+            
+            <div class="entry-error" id="entryError"></div>
+            
+            <button class="btn" id="entrySubmitBtn" style="margin-top: 8px; width: 100%;">
+                Enter Portal
+            </button>
+        </div>
     </div>
 
     <!-- Sidebar: Candidate lists -->
@@ -925,12 +1028,15 @@
             </div>
 
             <!-- Download PDF Button -->
-            <div class="report-actions">
+            <div class="report-actions" style="gap: 16px;">
                 <button class="btn download-btn" id="printReportBtn">
                     <svg viewBox="0 0 24 24" style="fill: var(--bg-darkest); width: 18px; height: 18px;">
                         <path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/>
                     </svg>
                     Download Report as PDF
+                </button>
+                <button class="btn" id="logoutBtn" style="background-color: transparent; border: 1.5px solid var(--primary-accent); color: var(--primary-accent); max-width: 200px;" title="Return to Portal Entry">
+                    Return to Portal
                 </button>
             </div>
         </div>
@@ -961,6 +1067,8 @@
                     splash.style.opacity = '0';
                     setTimeout(() => {
                         splash.style.display = 'none';
+                        // Show entry screen on splash end
+                        entryScreen.style.display = 'flex';
                     }, 600);
                 }
             }, 2000);
@@ -977,6 +1085,8 @@
         });
 
         // Elements mapping
+        const sidebar = document.querySelector('.sidebar');
+        const mainPanel = document.querySelector('.main-panel');
         const candidateListEl = document.getElementById('candidateList');
         const startBtn = document.getElementById('startBtn');
         const welcomeScreen = document.getElementById('welcomeScreen');
@@ -991,6 +1101,14 @@
         const sendBtn = document.getElementById('sendBtn');
         const hintBtn = document.getElementById('hintBtn');
         const endBtn = document.getElementById('endBtn');
+        
+        // Entry Portal Elements
+        const entryScreen = document.getElementById('entryScreen');
+        const entryName = document.getElementById('entryName');
+        const entryId = document.getElementById('entryId');
+        const entrySubmitBtn = document.getElementById('entrySubmitBtn');
+        const entryError = document.getElementById('entryError');
+        const logoutBtn = document.getElementById('logoutBtn');
         
         // Report Elements
         const reportContainer = document.getElementById('reportContainer');
@@ -1023,25 +1141,32 @@
         }
 
         // Start Interview handler
-        startBtn.addEventListener('click', async () => {
-            if (!selectedCandidate) return;
+        startBtn.addEventListener('click', () => {
+            if (selectedCandidate) {
+                runInterview(selectedCandidate);
+            }
+        });
+
+        // Reusable session runner
+        async function runInterview(candidateToStart, greetingName) {
+            selectedCandidate = candidateToStart;
             
             // Setup session ID and states
             sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
             currentTopicLogs = [];
 
             // UI shifts
-            startBtn.disabled = true;
             welcomeScreen.style.display = 'none';
             reportContainer.style.display = 'none';
             chatContainer.style.display = 'flex';
             inputBar.style.display = 'flex';
             progressHeader.style.display = 'flex';
+            mainPanel.style.display = 'flex'; // Display workspace
 
             chatContainer.innerHTML = ''; // Clean thread
             
-            // Print Welcome bubble
-            appendAgentMessage(`Initializing assessment session for ${selectedCandidate.member.name}...`);
+            const displayName = greetingName || selectedCandidate.member.name;
+            appendAgentMessage(`Initializing assessment session for ${displayName}...`);
             showTypingIndicator();
 
             try {
@@ -1058,8 +1183,11 @@
                 const data = await response.json();
                 hideTypingIndicator();
                 
-                // Set Welcome message
-                appendAgentMessage(data.reply);
+                let welcomeReply = data.reply;
+                if (greetingName) {
+                    welcomeReply = `Welcome, ${displayName}. Let's begin your interview.`;
+                }
+                appendAgentMessage(welcomeReply);
                 updateProgress(data.progress);
 
                 // Start the interview first question trigger
@@ -1086,7 +1214,79 @@
                 appendAgentMessage("Error: Failed to communicate with the interview API server.");
                 console.error(err);
             }
+        }
+
+        // Candidate Entry Submit listener
+        entrySubmitBtn.addEventListener('click', async () => {
+            const nameVal = entryName.value.trim();
+            const idVal = entryId.value.trim().toUpperCase();
+            
+            if (!nameVal || !idVal) {
+                entryError.innerText = "Please enter both your Name and Candidate ID.";
+                entryError.style.display = 'block';
+                return;
+            }
+
+            entrySubmitBtn.disabled = true;
+            entryError.style.display = 'none';
+
+            try {
+                // Fetch candidates from API
+                const response = await fetch('/api/candidates');
+                const data = await response.json();
+                const matched = (data.candidates || []).find(c => c.member.id === idVal);
+
+                if (matched) {
+                    // Match found! Hide portal
+                    entryScreen.style.opacity = '0';
+                    setTimeout(() => {
+                        entryScreen.style.display = 'none';
+                    }, 400);
+
+                    // Skip the left candidate selection list
+                    sidebar.style.display = 'none';
+                    
+                    // Run the interview directly
+                    await runInterview(matched, nameVal);
+                } else {
+                    entryError.innerText = "Candidate ID not found. Please check and try again.";
+                    entryError.style.display = 'block';
+                    entrySubmitBtn.disabled = false;
+                }
+            } catch (err) {
+                console.error(err);
+                entryError.innerText = "Error contacting API server. Ensure backend is running.";
+                entryError.style.display = 'block';
+                entrySubmitBtn.disabled = false;
+            }
         });
+
+        // Return to Portal Logout listener
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => {
+                // Reset UI displays
+                reportContainer.style.display = 'none';
+                welcomeScreen.style.display = 'flex';
+                chatContainer.style.display = 'none';
+                inputBar.style.display = 'none';
+                progressHeader.style.display = 'none';
+                mainPanel.style.display = 'none';
+                sidebar.style.display = 'none';
+                
+                // Reset inputs and show portal entry screen
+                entryScreen.style.display = 'flex';
+                entryScreen.style.opacity = '1';
+                entrySubmitBtn.disabled = false;
+                entryName.value = '';
+                entryId.value = '';
+                entryError.style.display = 'none';
+                
+                // Clean session states
+                selectedCandidate = null;
+                sessionId = "";
+                currentTopicLogs = [];
+            });
+        }
 
         // Trigger message send
         sendBtn.addEventListener('click', sendAnswer);
