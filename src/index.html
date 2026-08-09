@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interview Agent - Candidate Assessment Hub</title>
+    <title>SkillHire - Candidate Assessment Hub</title>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -38,6 +38,64 @@
             height: 100vh;
             display: flex;
             overflow: hidden;
+        }
+
+        /* Splash Screen Styling */
+        .splash-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: var(--bg-darkest);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            opacity: 1;
+            transition: opacity 0.6s ease-out;
+        }
+
+        .splash-logo-card {
+            background-color: #ffffff;
+            padding: 24px;
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(12, 150, 156, 0.25);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 140px;
+            height: 140px;
+            transform: scale(0.85);
+            filter: blur(10px);
+            opacity: 0;
+            transition: transform 1.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+                        filter 1.2s ease-out,
+                        opacity 1.2s ease-out;
+        }
+
+        .splash-logo-card.active {
+            transform: scale(1);
+            filter: blur(0);
+            opacity: 1;
+        }
+
+        .splash-text {
+            margin-top: 24px;
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: var(--text-light);
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.8s ease-out 0.4s,
+                        transform 0.8s ease-out 0.4s;
+        }
+
+        .splash-text.active {
+            opacity: 1;
+            transform: translateY(0);
         }
 
         /* Sidebar Styling */
@@ -320,6 +378,12 @@
             border: 1px solid var(--mid-tone);
             border-top-left-radius: 4px;
             color: var(--text-light);
+        }
+
+        .message-row.agent .message-bubble.hint {
+            border: 1.5px dashed var(--secondary-accent);
+            background-color: rgba(12, 150, 156, 0.05);
+            color: var(--text-muted);
         }
 
         .message-row.candidate .message-bubble {
@@ -731,11 +795,19 @@
 </head>
 <body>
 
+    <!-- Splash Screen -->
+    <div class="splash-screen" id="splashScreen">
+        <div class="splash-logo-card" id="splashLogo">
+            <img src="static/logo.png" alt="SkillHire Logo" style="width: 100%; height: 100%; object-fit: contain;">
+        </div>
+        <div class="splash-text" id="splashText">SkillHire</div>
+    </div>
+
     <!-- Sidebar: Candidate lists -->
     <div class="sidebar">
         <div class="logo-container">
-            <div class="logo-icon">IA</div>
-            <div class="logo-text">Assessment Hub</div>
+            <img src="static/logo.png" alt="Logo" style="width: 36px; height: 36px; border-radius: 8px; object-fit: cover; border: 1px solid var(--muted-light);">
+            <div class="logo-text">SkillHire</div>
         </div>
 
         <div class="section-title">Select Candidate</div>
@@ -767,9 +839,9 @@
 
         <!-- Welcome screen (default) -->
         <div class="welcome-screen" id="welcomeScreen">
-            <h1 class="welcome-title">AI Candidate Assessment Hub</h1>
+            <h1 class="welcome-title">SkillHire Technical Portal</h1>
             <p class="welcome-subtitle">
-                Select a candidate from the left sidebar to initialize a curriculum-aligned technical interview session. The backend system will select tailored topics based on their logs and assess their depth.
+                Select a candidate from the left sidebar to initialize a curriculum-aligned technical interview session. The SkillHire system will select tailored topics based on their logs and assess their depth.
             </p>
         </div>
 
@@ -782,7 +854,10 @@
         <div class="input-bar" id="inputBar">
             <input type="text" id="answerInput" placeholder="Type your technical response here..." autocomplete="off">
             <button class="send-btn" id="hintBtn" style="background-color: var(--mid-tone); color: var(--text-light); width: auto; padding: 0 16px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px;" title="Get a nudge if you are stuck">
-                💡 Hint
+                💡 Need a hint?
+            </button>
+            <button class="send-btn" id="endBtn" style="background-color: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); width: auto; padding: 0 16px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px;" title="End the interview early">
+                🛑 End Interview
             </button>
             <button class="send-btn" id="sendBtn">
                 <svg class="send-icon" viewBox="0 0 24 24">
@@ -795,7 +870,7 @@
         <div class="report-container" id="reportContainer">
             <div class="report-header-card">
                 <div class="report-title-row">
-                    <h2 class="report-main-title" id="reportCandidateHeader">Sarah Johnson - Assessment Report</h2>
+                    <h2 class="report-main-title" id="reportCandidateHeader">Sarah Johnson - SkillHire Assessment Report</h2>
                     <span class="day-badge" style="background-color: var(--primary-accent); border: none; color: var(--bg-darkest); font-weight: 700; padding: 6px 12px;">Completed</span>
                 </div>
                 <p class="report-summary-text" id="reportSummary">Summary loading...</p>
@@ -870,6 +945,25 @@
 
         // Fetch candidates list on load
         window.addEventListener('DOMContentLoaded', async () => {
+            // Trigger splash animation
+            setTimeout(() => {
+                const logo = document.getElementById('splashLogo');
+                const text = document.getElementById('splashText');
+                if (logo) logo.classList.add('active');
+                if (text) text.classList.add('active');
+            }, 100);
+
+            // Fade out splash screen after 2 seconds
+            setTimeout(() => {
+                const splash = document.getElementById('splashScreen');
+                if (splash) {
+                    splash.style.opacity = '0';
+                    setTimeout(() => {
+                        splash.style.display = 'none';
+                    }, 600);
+                }
+            }, 2000);
+
             try {
                 const response = await fetch('data/candidates.json');
                 const data = await response.json();
@@ -895,6 +989,7 @@
         const answerInput = document.getElementById('answerInput');
         const sendBtn = document.getElementById('sendBtn');
         const hintBtn = document.getElementById('hintBtn');
+        const endBtn = document.getElementById('endBtn');
         
         // Report Elements
         const reportContainer = document.getElementById('reportContainer');
@@ -1007,6 +1102,7 @@
             answerInput.disabled = true;
             sendBtn.disabled = true;
             if (hintBtn) hintBtn.disabled = true;
+            if (endBtn) endBtn.disabled = true;
 
             // Append candidate answer bubble
             appendCandidateMessage(answer);
@@ -1050,6 +1146,7 @@
                         answerInput.disabled = false;
                         sendBtn.disabled = false;
                         if (hintBtn) hintBtn.disabled = false;
+                        if (endBtn) endBtn.disabled = false;
                         answerInput.focus();
                     }
                 }, 1000);
@@ -1061,6 +1158,7 @@
                 answerInput.disabled = false;
                 sendBtn.disabled = false;
                 if (hintBtn) hintBtn.disabled = false;
+                if (endBtn) endBtn.disabled = false;
             }
         }
 
@@ -1070,6 +1168,7 @@
                 if (hintBtn.disabled) return;
                 hintBtn.disabled = true;
                 sendBtn.disabled = true;
+                if (endBtn) endBtn.disabled = true;
                 showTypingIndicator();
 
                 try {
@@ -1083,19 +1182,65 @@
                     });
                     const data = await response.json();
                     hideTypingIndicator();
-                    appendAgentMessage(data.reply);
+                    appendHintMessage(data.reply);
                     
                     hintBtn.disabled = false;
                     sendBtn.disabled = false;
+                    if (endBtn) endBtn.disabled = false;
                     answerInput.focus();
                 } catch (err) {
                     hideTypingIndicator();
-                    appendAgentMessage("Error: Failed to retrieve hint.");
+                    appendHintMessage("Error: Failed to retrieve hint.");
                     console.error(err);
                     hintBtn.disabled = false;
                     sendBtn.disabled = false;
+                    if (endBtn) endBtn.disabled = false;
                 }
             });
+        }
+
+        // End Interview Button Listener
+        if (endBtn) {
+            endBtn.addEventListener('click', async () => {
+                if (!confirm("Are you sure you want to end the interview early?")) return;
+                endBtn.disabled = true;
+                if (hintBtn) hintBtn.disabled = true;
+                sendBtn.disabled = true;
+                showTypingIndicator();
+
+                try {
+                    const response = await fetch('http://127.0.0.1:8000/api/interview', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            sessionId: sessionId,
+                            message: "end"
+                        })
+                    });
+                    const data = await response.json();
+                    hideTypingIndicator();
+                    
+                    progressHeader.style.display = 'none';
+                    chatContainer.style.display = 'none';
+                    inputBar.style.display = 'none';
+                    renderFinalReport(data.feedback);
+                } catch (err) {
+                    hideTypingIndicator();
+                    appendAgentMessage("Error: Failed to end the session gracefully.");
+                    console.error(err);
+                    endBtn.disabled = false;
+                    if (hintBtn) hintBtn.disabled = false;
+                    sendBtn.disabled = false;
+                }
+            });
+        }
+
+        function appendHintMessage(text) {
+            const row = document.createElement('div');
+            row.className = 'message-row agent';
+            row.innerHTML = `<div class="message-bubble hint"><strong>💡 Hint:</strong> ${text}</div>`;
+            chatContainer.appendChild(row);
+            scrollChat();
         }
 
         // Track evaluation ratios per topic for final scoring
@@ -1198,7 +1343,7 @@
 
         // Render dynamic SVG chart and reports
         function renderFinalReport(feedback) {
-            reportCandidateHeader.innerText = `${selectedCandidate.member.name} - Evaluation Report`;
+            reportCandidateHeader.innerText = `${selectedCandidate.member.name} - SkillHire Evaluation Report`;
             reportSummary.innerText = feedback.summary;
 
             // Render list bullets

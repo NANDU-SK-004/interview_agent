@@ -139,3 +139,28 @@ After implementing all of this, test and show me results for:
 - Typing "I want to end the interview" mid-session → should exit gracefully with partial feedback
 - A hint request on a question → should return a helpful nudge, not the answer
 
+Rebrand the frontend from "Assessment Hub" to "SkillHire".
+
+SPLASH SCREEN (new):
+1. On page load, show a full-screen splash first: the SkillHire logo (located at src/static/logo.png — check the actual path used in this project and adjust if needed) centered on the dark background (#031716).
+2. Animate it: start blurred and slightly scaled down/faded, then smoothly transition to sharp, full-opacity, normal scale over about 1-1.5 seconds.
+3. Since the logo has a white background, either:
+   a. Make the white background transparent (treat pure white as transparent if possible), OR
+   b. Place the logo inside a soft rounded white/light card with padding so it doesn't look like a floating white box on the dark page.
+4. After the animation completes, hold briefly (~0.5s) then smoothly transition/fade into the candidate selection screen (the existing candidate list UI).
+5. This splash should only show once per page load, not on every screen transition after that.
+
+## Frontend issues resolving
+
+
+REBRAND:
+1. Replace "Assessment Hub" text and the "IA" icon with the SkillHire logo (small version) in the header/sidebar, consistent with the splash branding.
+2. Update any other visible "Assessment Hub" references to "SkillHire".
+
+OTHER UI ADDITIONS:
+1. Small "End Interview" button/link near the chat input for graceful early exit — wire it to the exit handling already implemented in the backend.
+2. Small "Need a hint?" button near the input, sends requestHint: true, displays the hint as a distinct message bubble (dashed border, labeled "💡 Hint").
+3. Make sure "wrong" answerQuality renders with a distinct red "✗ Incorrect answer" tag, separate from the amber "→ Follow-up incoming" (shallow) tag.
+4. Keep the progress bar, chat bubbles, typing animation, radar chart, and PDF export exactly as-is — this is a polish/rebrand pass, not a redesign.
+
+Keep everything minimal, clean, and consistent with the existing dark teal color palette (#031716, #032F30, #0A7075, #0C969C, #6BA3BE, #274D60).

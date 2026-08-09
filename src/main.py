@@ -745,6 +745,7 @@ def generate_completion_response(session_state: Dict[str, Any], answer_quality: 
 
 # Serve static data folder
 app.mount("/data", StaticFiles(directory=os.path.join(BASE_DIR, "data")), name="data")
+app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "src", "static")), name="static")
 
 # Serve index.html SPA
 @app.get("/")
