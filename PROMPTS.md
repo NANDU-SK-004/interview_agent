@@ -175,3 +175,30 @@ Fix this by:
 4. Show me the exact transcript data being sent to Gemini for feedback generation in this early-exit scenario so I can confirm what's actually happening.
 
 Test this exact scenario: start a new session, immediately send "I want to leave" as the very first message (before answering the friendly opening question), and show me the resulting feedback response.
+
+
+
+Switch the entire frontend UI from the current dark theme to a light, plain, professional theme — think clean enterprise SaaS, not glassy/dark. Remove any glassmorphism, heavy shadows, or glow effects — keep it flat and minimal.
+
+New color palette:
+- Background: #FFFFFF (main), #F7F9FA (page background if needed)
+- Card/sidebar surface: #F1F4F6
+- Primary text: #0F1B24
+- Secondary/muted text: #5B6B76
+- Primary accent (buttons, active states, progress bar fill): #0A7075
+- Secondary accent (agent message bubbles): #0C969C (use as a light tint background, e.g. #0C969C at 10-15% opacity, with dark text — not solid teal with white text, for readability on light backgrounds)
+- Candidate answer bubbles: light gray #E9EDEF with dark text
+- Borders/dividers: #E1E6E9
+- Strong answer tag: green #1B8A5A
+- Shallow/follow-up tag: amber #B8860B
+- Wrong answer tag: red #C0392B
+
+Requirements:
+1. Update all existing screens (splash, candidate selection, chat interface, feedback report, radar chart) to this light theme.
+2. Chat bubbles should use subtle background tints (not solid saturated color) so text stays easily readable — dark text on light bubble backgrounds throughout.
+3. Buttons: solid #0A7075 background with white text for primary actions; outline/ghost style for secondary actions (hint, end interview).
+4. Keep borders and dividers subtle (#E1E6E9), flat design — minimal shadow, no blur/glass effects.
+5. The SkillHire logo should now sit on a light background — if it was previously placed on a dark card, adjust so it displays cleanly on white/light gray without needing a special contrast card.
+6. Keep all existing functionality exactly as-is (progress bar, quality tags, typing animation, radar chart, PDF export, hint button, end interview button) — this is a visual theme change only, not a functional change.
+
+Show me a screenshot or description of the candidate list screen and the feedback report screen after the change so I can review.

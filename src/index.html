@@ -17,18 +17,20 @@
         }
 
         :root {
-            --bg-darkest: #031716;
-            --bg-surface: #032F30;
+            --bg-darkest: #F7F9FA;
+            --bg-surface: #F1F4F6;
+            --bg-main: #FFFFFF;
             --primary-accent: #0A7075;
             --secondary-accent: #0C969C;
-            --muted-light: #6BA3BE;
-            --mid-tone: #274D60;
-            --text-light: #F4F7F6;
-            --text-muted: #A3C3D9;
-            --success: #10B981;
-            --warning: #F59E0B;
+            --border-color: #E1E6E9;
+            --text-light: #0F1B24;
+            --text-muted: #5B6B76;
+            --mid-tone: #E9EDEF;
+            --success: #1B8A5A;
+            --warning: #B8860B;
+            --danger: #C0392B;
             --font-family: 'Outfit', sans-serif;
-            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            --transition: all 0.25s ease;
         }
 
         body {
@@ -61,7 +63,7 @@
             background-color: #ffffff;
             padding: 24px;
             border-radius: 20px;
-            box-shadow: 0 8px 32px rgba(12, 150, 156, 0.25);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -134,11 +136,9 @@
 
         .logo-text {
             font-size: 20px;
-            font-weight: 600;
+            font-weight: 700;
             letter-spacing: 0.5px;
-            background: linear-gradient(to right, var(--text-light), var(--text-muted));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: var(--text-light);
         }
 
         .section-title {
@@ -176,8 +176,8 @@
         }
 
         .candidate-card {
-            background-color: rgba(39, 77, 96, 0.2);
-            border: 1px solid rgba(107, 163, 190, 0.2);
+            background-color: var(--bg-main);
+            border: 1px solid var(--border-color);
             border-radius: 12px;
             padding: 16px;
             cursor: pointer;
@@ -185,15 +185,15 @@
         }
 
         .candidate-card:hover {
-            background-color: rgba(39, 77, 96, 0.4);
-            border-color: var(--muted-light);
+            background-color: var(--bg-surface);
+            border-color: var(--text-muted);
             transform: translateY(-2px);
         }
 
         .candidate-card.active {
             background-color: var(--mid-tone);
-            border-color: var(--secondary-accent);
-            box-shadow: 0 4px 16px rgba(12, 150, 156, 0.15);
+            border-color: var(--primary-accent);
+            box-shadow: none;
         }
 
         .candidate-name {
@@ -210,8 +210,8 @@
 
         .btn {
             width: 100%;
-            background: linear-gradient(135deg, var(--primary-accent), var(--secondary-accent));
-            color: var(--bg-darkest);
+            background: var(--primary-accent);
+            color: #FFFFFF;
             border: none;
             border-radius: 12px;
             padding: 14px 20px;
@@ -223,13 +223,12 @@
             align-items: center;
             justify-content: center;
             gap: 8px;
-            box-shadow: 0 4px 20px rgba(10, 112, 117, 0.3);
+            box-shadow: none;
         }
 
         .btn:hover:not(:disabled) {
+            background-color: var(--secondary-accent);
             transform: translateY(-2px);
-            box-shadow: 0 6px 24px rgba(12, 150, 156, 0.5);
-            filter: brightness(1.1);
         }
 
         .btn:active:not(:disabled) {
@@ -237,8 +236,8 @@
         }
 
         .btn:disabled {
-            background: var(--mid-tone);
-            color: rgba(244, 247, 246, 0.3);
+            background: var(--border-color);
+            color: var(--text-muted);
             cursor: not-allowed;
             box-shadow: none;
         }
@@ -249,13 +248,13 @@
             display: flex;
             flex-direction: column;
             position: relative;
-            background-color: var(--bg-darkest);
+            background-color: var(--bg-main);
         }
 
         /* Top Progress Bar & Header */
         .progress-header {
             background-color: var(--bg-surface);
-            border-bottom: 1px solid var(--mid-tone);
+            border-bottom: 1px solid var(--border-color);
             padding: 18px 32px;
             display: none;
             flex-direction: column;
@@ -277,7 +276,7 @@
 
         .day-badge {
             background-color: var(--mid-tone);
-            border: 1px solid var(--muted-light);
+            border: 1px solid var(--border-color);
             border-radius: 6px;
             padding: 4px 8px;
             font-size: 11px;
@@ -290,12 +289,12 @@
         .topic-title {
             font-size: 18px;
             font-weight: 600;
-            color: var(--secondary-accent);
+            color: var(--primary-accent);
         }
 
         .progress-track {
             height: 6px;
-            background-color: rgba(244, 247, 246, 0.08);
+            background-color: var(--mid-tone);
             border-radius: 3px;
             overflow: hidden;
             width: 100%;
@@ -303,11 +302,11 @@
 
         .progress-fill {
             height: 100%;
-            background: linear-gradient(to right, var(--primary-accent), var(--secondary-accent));
+            background: var(--primary-accent);
             width: 0%;
             border-radius: 3px;
             transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 0 10px rgba(12, 150, 156, 0.5);
+            box-shadow: none;
         }
 
         /* Welcome screen */
@@ -369,13 +368,13 @@
             line-height: 1.5;
             font-size: 15px;
             position: relative;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            box-shadow: none;
             animation: bubblePop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
 
         .message-row.agent .message-bubble {
-            background-color: var(--bg-surface);
-            border: 1px solid var(--mid-tone);
+            background-color: rgba(12, 150, 156, 0.12);
+            border: 1px solid rgba(12, 150, 156, 0.2);
             border-top-left-radius: 4px;
             color: var(--text-light);
         }
@@ -388,7 +387,7 @@
 
         .message-row.candidate .message-bubble {
             background-color: var(--mid-tone);
-            border: 1px solid rgba(107, 163, 190, 0.3);
+            border: 1px solid var(--border-color);
             border-top-right-radius: 4px;
             color: var(--text-light);
         }
@@ -415,21 +414,21 @@
         }
 
         .quality-tag.strong {
-            background-color: rgba(16, 185, 129, 0.15);
+            background-color: rgba(27, 138, 90, 0.08);
             color: var(--success);
-            border: 1px solid rgba(16, 185, 129, 0.3);
+            border: 1px solid rgba(27, 138, 90, 0.25);
         }
 
         .quality-tag.shallow {
-            background-color: rgba(245, 158, 11, 0.15);
+            background-color: rgba(184, 134, 11, 0.08);
             color: var(--warning);
-            border: 1px solid rgba(245, 158, 11, 0.3);
+            border: 1px solid rgba(184, 134, 11, 0.25);
         }
 
         .quality-tag.wrong {
-            background-color: rgba(239, 68, 68, 0.15);
-            color: #EF4444;
-            border: 1px solid rgba(239, 68, 68, 0.3);
+            background-color: rgba(192, 57, 43, 0.08);
+            color: var(--danger);
+            border: 1px solid rgba(192, 57, 43, 0.25);
         }
 
         /* Typing Indicator Bubble */
@@ -438,11 +437,11 @@
             align-items: center;
             gap: 5px;
             padding: 12px 18px;
-            background-color: var(--bg-surface);
-            border: 1px solid var(--mid-tone);
+            background-color: rgba(12, 150, 156, 0.12);
+            border: 1px solid rgba(12, 150, 156, 0.2);
             border-radius: 16px;
             border-top-left-radius: 4px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            box-shadow: none;
             width: fit-content;
             animation: fadeIn 0.3s ease-out;
         }
@@ -460,8 +459,8 @@
 
         /* Chat Input Styling */
         .input-bar {
-            background-color: var(--bg-surface);
-            border-top: 1px solid var(--mid-tone);
+            background-color: var(--bg-main);
+            border-top: 1px solid var(--border-color);
             padding: 20px 32px;
             display: none;
             gap: 16px;
@@ -470,8 +469,8 @@
 
         .input-bar input {
             flex-grow: 1;
-            background-color: var(--bg-darkest);
-            border: 1px solid var(--mid-tone);
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-color);
             border-radius: 12px;
             padding: 14px 18px;
             color: var(--text-light);
@@ -482,12 +481,13 @@
         }
 
         .input-bar input:focus {
-            border-color: var(--secondary-accent);
-            box-shadow: 0 0 8px rgba(12, 150, 156, 0.25);
+            border-color: var(--primary-accent);
+            box-shadow: none;
         }
 
         .input-bar input::placeholder {
-            color: rgba(163, 195, 217, 0.4);
+            color: var(--text-muted);
+            opacity: 0.6;
         }
 
         .send-btn {
@@ -512,8 +512,8 @@
         }
 
         .send-btn:disabled {
-            background-color: rgba(39, 77, 96, 0.4);
-            color: rgba(244, 247, 246, 0.15);
+            background-color: var(--border-color);
+            color: var(--text-muted);
             cursor: not-allowed;
         }
 
@@ -538,10 +538,10 @@
 
         .report-header-card {
             background-color: var(--bg-surface);
-            border: 1px solid var(--mid-tone);
+            border: 1px solid var(--border-color);
             border-radius: 16px;
             padding: 32px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            box-shadow: none;
             position: relative;
             overflow: hidden;
         }
@@ -553,7 +553,7 @@
             left: 0;
             width: 4px;
             height: 100%;
-            background: linear-gradient(to bottom, var(--primary-accent), var(--secondary-accent));
+            background: var(--primary-accent);
         }
 
         .report-title-row {
@@ -582,8 +582,8 @@
         }
 
         .report-section {
-            background-color: rgba(39, 77, 96, 0.15);
-            border: 1px solid rgba(107, 163, 190, 0.15);
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-color);
             border-radius: 16px;
             padding: 24px;
             display: flex;
@@ -597,11 +597,11 @@
             gap: 8px;
             font-size: 16px;
             font-weight: 600;
-            color: var(--secondary-accent);
+            color: var(--primary-accent);
         }
 
         .report-section-header.gaps {
-            color: var(--warning);
+            color: var(--danger);
         }
 
         .report-section-header.next {
@@ -642,12 +642,13 @@
 
         .chart-card {
             background-color: var(--bg-surface);
-            border: 1px solid var(--mid-tone);
+            border: 1px solid var(--border-color);
             border-radius: 16px;
             padding: 28px;
             display: flex;
             flex-direction: column;
             gap: 20px;
+            box-shadow: none;
         }
 
         .chart-header {
@@ -853,14 +854,14 @@
         <!-- Input Bar (shown during active interview) -->
         <div class="input-bar" id="inputBar">
             <input type="text" id="answerInput" placeholder="Type your technical response here..." autocomplete="off">
-            <button class="send-btn" id="hintBtn" style="background-color: var(--mid-tone); color: var(--text-light); width: auto; padding: 0 16px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px;" title="Get a nudge if you are stuck">
+            <button class="send-btn" id="hintBtn" style="background-color: transparent; border: 1.5px solid var(--primary-accent); color: var(--primary-accent); width: auto; padding: 0 16px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px;" title="Get a nudge if you are stuck">
                 💡 Need a hint?
             </button>
-            <button class="send-btn" id="endBtn" style="background-color: rgba(239, 68, 68, 0.15); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); width: auto; padding: 0 16px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px;" title="End the interview early">
+            <button class="send-btn" id="endBtn" style="background-color: transparent; border: 1.5px solid var(--danger); color: var(--danger); width: auto; padding: 0 16px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px;" title="End the interview early">
                 🛑 End Interview
             </button>
             <button class="send-btn" id="sendBtn">
-                <svg class="send-icon" viewBox="0 0 24 24">
+                <svg class="send-icon" viewBox="0 0 24 24" style="fill: #FFFFFF;">
                     <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
                 </svg>
             </button>
@@ -1411,15 +1412,11 @@
             
             let svgContent = `
                 <svg width="100%" height="100%" viewBox="0 0 ${chartWidth} ${chartHeight}" style="background-color: transparent;">
-                    <!-- Definitions for Glowing gradients -->
                     <defs>
                         <linearGradient id="barGrad" x1="0%" y1="0%" x2="100%" y2="0%">
                             <stop offset="0%" stop-color="#0A7075" />
                             <stop offset="100%" stop-color="#0C969C" />
                         </linearGradient>
-                        <filter id="glow" x="-10%" y="-10%" width="120%" height="120%">
-                            <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0C969C" flood-opacity="0.3"/>
-                        </filter>
                     </defs>
             `;
 
@@ -1427,13 +1424,13 @@
             for (let i = 1; i <= 4; i++) {
                 const xVal = labelWidth + (barMaxWidth * (i / 4));
                 svgContent += `
-                    <line x1="${xVal}" y1="10" x2="${xVal}" y2="${chartHeight - 40}" stroke="rgba(107, 163, 190, 0.15)" stroke-dasharray="4"/>
+                    <line x1="${xVal}" y1="10" x2="${xVal}" y2="${chartHeight - 40}" stroke="var(--border-color)" stroke-dasharray="4"/>
                     <text x="${xVal}" y="${chartHeight - 15}" fill="var(--text-muted)" font-size="11" text-anchor="middle">${i * 25}%</text>
                 `;
             }
             svgContent += `
                 <text x="${labelWidth}" y="${chartHeight - 15}" fill="var(--text-muted)" font-size="11" text-anchor="middle">0%</text>
-                <line x1="${labelWidth}" y1="10" x2="${labelWidth}" y2="${chartHeight - 40}" stroke="rgba(107, 163, 190, 0.3)" />
+                <line x1="${labelWidth}" y1="10" x2="${labelWidth}" y2="${chartHeight - 40}" stroke="var(--border-color)" />
             `;
 
             // Draw Bars and Labels
@@ -1446,10 +1443,10 @@
                     <text x="${labelWidth - 15}" y="${yPos + 18}" fill="var(--text-light)" font-size="13" font-weight="500" text-anchor="end">${item.title}</text>
                     
                     <!-- Background Empty Track -->
-                    <rect x="${labelWidth}" y="${yPos}" width="${barMaxWidth}" height="24" rx="6" fill="rgba(39, 77, 96, 0.15)" stroke="rgba(107, 163, 190, 0.1)" stroke-width="1"/>
+                    <rect x="${labelWidth}" y="${yPos}" width="${barMaxWidth}" height="24" rx="6" fill="var(--mid-tone)" stroke="var(--border-color)" stroke-width="1"/>
                     
                     <!-- Filled Score Bar -->
-                    <rect x="${labelWidth}" y="${yPos}" width="${Math.max(barWidth, 10)}" height="24" rx="6" fill="url(#barGrad)" filter="url(#glow)"/>
+                    <rect x="${labelWidth}" y="${yPos}" width="${Math.max(barWidth, 10)}" height="24" rx="6" fill="url(#barGrad)"/>
                     
                     <!-- Score Badge inside bar or next to it -->
                     <text x="${labelWidth + Math.max(barWidth, 10) + 12}" y="${yPos + 17}" fill="var(--text-muted)" font-size="12" font-weight="600">${item.score}%</text>
