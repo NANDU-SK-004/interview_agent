@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interview Agent - Candidate Assessment Hub</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* CSS Reset and Variable Setup */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-darkest: #031716;
+            --bg-surface: #032F30;
+            --primary-accent: #0A7075;
+            --secondary-accent: #0C969C;
+            --muted-light: #6BA3BE;
+            --mid-tone: #274D60;
+            --text-light: #F4F7F6;
+            --text-muted: #A3C3D9;
+            --success: #10B981;
+            --warning: #F59E0B;
+            --font-family: 'Outfit', sans-serif;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-darkest);
+            color: var(--text-light);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Sidebar Styling */
+        .sidebar {
+            width: 320px;
+            background-color: var(--bg-surface);
+            border-right: 1px solid var(--mid-tone);
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            flex-shrink: 0;
+            z-index: 10;
+            box-shadow: 4px 0 24px rgba(0, 0, 0, 0.35);
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 32px;
+        }
+
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--primary-accent), var(--secondary-accent));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 18px;
+            color: var(--bg-darkest);
+            box-shadow: 0 0 16px rgba(12, 150, 156, 0.4);
+        }
+
+        .logo-text {
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            background: linear-gradient(to right, var(--text-light), var(--text-muted));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .section-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+
+        .candidate-list {
+            flex-grow: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 24px;
+            padding-right: 4px;
+        }
+
+        /* Scrollbar styles */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--mid-tone);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--muted-light);
+        }
+
+        .candidate-card {
+            background-color: rgba(39, 77, 96, 0.2);
+            border: 1px solid rgba(107, 163, 190, 0.2);
+            border-radius: 12px;
+            padding: 16px;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .candidate-card:hover {
+            background-color: rgba(39, 77, 96, 0.4);
+            border-color: var(--muted-light);
+            transform: translateY(-2px);
+        }
+
+        .candidate-card.active {
+            background-color: var(--mid-tone);
+            border-color: var(--secondary-accent);
+            box-shadow: 0 4px 16px rgba(12, 150, 156, 0.15);
+        }
+
+        .candidate-name {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: var(--text-light);
+        }
+
+        .candidate-role {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .btn {
+            width: 100%;
+            background: linear-gradient(135deg, var(--primary-accent), var(--secondary-accent));
+            color: var(--bg-darkest);
+            border: none;
+            border-radius: 12px;
+            padding: 14px 20px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: 0 4px 20px rgba(10, 112, 117, 0.3);
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(12, 150, 156, 0.5);
+            filter: brightness(1.1);
+        }
+
+        .btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            background: var(--mid-tone);
+            color: rgba(244, 247, 246, 0.3);
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* Main Window Panel */
+        .main-panel {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            background-color: var(--bg-darkest);
+        }
+
+        /* Top Progress Bar & Header */
+        .progress-header {
+            background-color: var(--bg-surface);
+            border-bottom: 1px solid var(--mid-tone);
+            padding: 18px 32px;
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            animation: slideDown 0.4s ease-out;
+        }
+
+        .progress-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .topic-indicator {
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--text-light);
+        }
+
+        .day-badge {
+            background-color: var(--mid-tone);
+            border: 1px solid var(--muted-light);
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .topic-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--secondary-accent);
+        }
+
+        .progress-track {
+            height: 6px;
+            background-color: rgba(244, 247, 246, 0.08);
+            border-radius: 3px;
+            overflow: hidden;
+            width: 100%;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(to right, var(--primary-accent), var(--secondary-accent));
+            width: 0%;
+            border-radius: 3px;
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 0 10px rgba(12, 150, 156, 0.5);
+        }
+
+        /* Welcome screen */
+        .welcome-screen {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 40px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .welcome-title {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            background: linear-gradient(to right, #ffffff, var(--muted-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .welcome-subtitle {
+            font-size: 16px;
+            color: var(--text-muted);
+            line-height: 1.6;
+            margin-bottom: 32px;
+        }
+
+        /* Chat Layout Area */
+        .chat-container {
+            flex-grow: 1;
+            padding: 32px;
+            overflow-y: auto;
+            display: none;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .message-row {
+            display: flex;
+            width: 100%;
+        }
+
+        .message-row.agent {
+            justify-content: flex-start;
+        }
+
+        .message-row.candidate {
+            justify-content: flex-end;
+        }
+
+        .message-bubble {
+            max-width: 70%;
+            padding: 16px 20px;
+            border-radius: 16px;
+            line-height: 1.5;
+            font-size: 15px;
+            position: relative;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            animation: bubblePop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .message-row.agent .message-bubble {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--mid-tone);
+            border-top-left-radius: 4px;
+            color: var(--text-light);
+        }
+
+        .message-row.candidate .message-bubble {
+            background-color: var(--mid-tone);
+            border: 1px solid rgba(107, 163, 190, 0.3);
+            border-top-right-radius: 4px;
+            color: var(--text-light);
+        }
+
+        /* Quality Tags near Candidate Bubble */
+        .quality-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 6px;
+            max-width: 70%;
+        }
+
+        .quality-tag {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            animation: fadeIn 0.4s ease-out;
+            margin-right: 4px;
+        }
+
+        .quality-tag.strong {
+            background-color: rgba(16, 185, 129, 0.15);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .quality-tag.shallow {
+            background-color: rgba(245, 158, 11, 0.15);
+            color: var(--warning);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .quality-tag.wrong {
+            background-color: rgba(239, 68, 68, 0.15);
+            color: #EF4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        /* Typing Indicator Bubble */
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 12px 18px;
+            background-color: var(--bg-surface);
+            border: 1px solid var(--mid-tone);
+            border-radius: 16px;
+            border-top-left-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            width: fit-content;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .typing-dot {
+            width: 7px;
+            height: 7px;
+            background-color: var(--secondary-accent);
+            border-radius: 50%;
+            animation: typingBounce 1.4s infinite ease-in-out both;
+        }
+
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+        /* Chat Input Styling */
+        .input-bar {
+            background-color: var(--bg-surface);
+            border-top: 1px solid var(--mid-tone);
+            padding: 20px 32px;
+            display: none;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .input-bar input {
+            flex-grow: 1;
+            background-color: var(--bg-darkest);
+            border: 1px solid var(--mid-tone);
+            border-radius: 12px;
+            padding: 14px 18px;
+            color: var(--text-light);
+            font-family: var(--font-family);
+            font-size: 15px;
+            outline: none;
+            transition: var(--transition);
+        }
+
+        .input-bar input:focus {
+            border-color: var(--secondary-accent);
+            box-shadow: 0 0 8px rgba(12, 150, 156, 0.25);
+        }
+
+        .input-bar input::placeholder {
+            color: rgba(163, 195, 217, 0.4);
+        }
+
+        .send-btn {
+            width: 48px;
+            height: 48px;
+            background-color: var(--primary-accent);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--bg-darkest);
+            flex-shrink: 0;
+        }
+
+        .send-btn:hover:not(:disabled) {
+            background-color: var(--secondary-accent);
+            box-shadow: 0 0 14px rgba(12, 150, 156, 0.4);
+            transform: scale(1.05);
+        }
+
+        .send-btn:disabled {
+            background-color: rgba(39, 77, 96, 0.4);
+            color: rgba(244, 247, 246, 0.15);
+            cursor: not-allowed;
+        }
+
+        .send-icon {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+        }
+
+        /* Final Report Styling */
+        .report-container {
+            display: none;
+            flex-direction: column;
+            padding: 40px;
+            overflow-y: auto;
+            max-width: 960px;
+            width: 100%;
+            margin: 0 auto;
+            gap: 32px;
+            animation: fadeInUp 0.5s ease-out;
+        }
+
+        .report-header-card {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--mid-tone);
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .report-header-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: linear-gradient(to bottom, var(--primary-accent), var(--secondary-accent));
+        }
+
+        .report-title-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+
+        .report-main-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-light);
+        }
+
+        .report-summary-text {
+            font-size: 15px;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .report-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        .report-section {
+            background-color: rgba(39, 77, 96, 0.15);
+            border: 1px solid rgba(107, 163, 190, 0.15);
+            border-radius: 16px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .report-section-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--secondary-accent);
+        }
+
+        .report-section-header.gaps {
+            color: var(--warning);
+        }
+
+        .report-section-header.next {
+            color: var(--text-light);
+        }
+
+        .bullets-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .bullets-list li {
+            font-size: 14px;
+            color: var(--text-muted);
+            line-height: 1.5;
+            position: relative;
+            padding-left: 20px;
+        }
+
+        .bullets-list li::before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            top: 0;
+            color: var(--secondary-accent);
+            font-size: 18px;
+        }
+
+        .report-section-header.gaps ~ .bullets-list li::before {
+            color: var(--warning);
+        }
+
+        .report-section-header.next ~ .bullets-list li::before {
+            color: var(--primary-accent);
+        }
+
+        .chart-card {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--mid-tone);
+            border-radius: 16px;
+            padding: 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .chart-header {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-light);
+        }
+
+        .svg-chart-container {
+            width: 100%;
+            height: 320px;
+        }
+
+        .report-actions {
+            display: flex;
+            justify-content: center;
+            margin-top: 12px;
+            margin-bottom: 40px;
+        }
+
+        .download-btn {
+            max-width: 280px;
+        }
+
+        /* Animations */
+        @keyframes bubblePop {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes typingBounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        @keyframes slideDown {
+            0% { transform: translateY(-100%); opacity: 0; }
+            100% { transform: translateY(0); opacity: 1; }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeInUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        /* Print Specific Styles */
+        @media print {
+            body {
+                background-color: #ffffff !important;
+                color: #000000 !important;
+                overflow: visible !important;
+                height: auto !important;
+            }
+
+            .sidebar, .progress-header, .chat-container, .input-bar, .report-actions {
+                display: none !important;
+            }
+
+            .main-panel {
+                background-color: #ffffff !important;
+                display: block !important;
+                width: 100% !important;
+                height: auto !important;
+                position: static !important;
+            }
+
+            .report-container {
+                display: flex !important;
+                width: 100% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                gap: 24px !important;
+                animation: none !important;
+            }
+
+            .report-header-card {
+                background-color: #f9fafb !important;
+                border: 1px solid #e5e7eb !important;
+                color: #000000 !important;
+                box-shadow: none !important;
+                page-break-inside: avoid;
+            }
+
+            .report-main-title {
+                color: #111827 !important;
+            }
+
+            .report-summary-text {
+                color: #4b5563 !important;
+            }
+
+            .report-grid {
+                display: block !important;
+            }
+
+            .report-section {
+                background-color: #ffffff !important;
+                border: 1px solid #e5e7eb !important;
+                color: #000000 !important;
+                margin-bottom: 24px !important;
+                page-break-inside: avoid;
+            }
+
+            .report-section-header {
+                color: #111827 !important;
+            }
+
+            .bullets-list li {
+                color: #374151 !important;
+            }
+
+            .bullets-list li::before {
+                color: #4b5563 !important;
+            }
+
+            .chart-card {
+                background-color: #ffffff !important;
+                border: 1px solid #e5e7eb !important;
+                box-shadow: none !important;
+                page-break-inside: avoid;
+            }
+
+            .chart-header {
+                color: #111827 !important;
+            }
+
+            svg text {
+                fill: #374151 !important;
+            }
+
+            svg rect.grid-line {
+                stroke: #e5e7eb !important;
+            }
+
+            svg line {
+                stroke: #e5e7eb !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar: Candidate lists -->
+    <div class="sidebar">
+        <div class="logo-container">
+            <div class="logo-icon">IA</div>
+            <div class="logo-text">Assessment Hub</div>
+        </div>
+
+        <div class="section-title">Select Candidate</div>
+        <div class="candidate-list" id="candidateList">
+            <!-- Dynamically populated -->
+        </div>
+
+        <button class="btn" id="startBtn" disabled>
+            <svg class="send-icon" viewBox="0 0 24 24" style="fill: var(--bg-darkest); width: 18px; height: 18px;">
+                <path d="M8 5v14l11-7z"/>
+            </svg>
+            Start Interview
+        </button>
+    </div>
+
+    <!-- Main Window Area -->
+    <div class="main-panel">
+        <!-- Topic Progress Bar (shown during active interview) -->
+        <div class="progress-header" id="progressHeader">
+            <div class="progress-meta">
+                <span class="topic-indicator" id="progressIndicator">Topic 0/0</span>
+                <span class="day-badge" id="dayBadge">Day 0</span>
+            </div>
+            <div class="topic-title" id="topicTitle">Select a candidate to begin.</div>
+            <div class="progress-track">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+
+        <!-- Welcome screen (default) -->
+        <div class="welcome-screen" id="welcomeScreen">
+            <h1 class="welcome-title">AI Candidate Assessment Hub</h1>
+            <p class="welcome-subtitle">
+                Select a candidate from the left sidebar to initialize a curriculum-aligned technical interview session. The backend system will select tailored topics based on their logs and assess their depth.
+            </p>
+        </div>
+
+        <!-- Chat Container (shown during active interview) -->
+        <div class="chat-container" id="chatContainer">
+            <!-- Chat bubble thread -->
+        </div>
+
+        <!-- Input Bar (shown during active interview) -->
+        <div class="input-bar" id="inputBar">
+            <input type="text" id="answerInput" placeholder="Type your technical response here..." autocomplete="off">
+            <button class="send-btn" id="hintBtn" style="background-color: var(--mid-tone); color: var(--text-light); width: auto; padding: 0 16px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px;" title="Get a nudge if you are stuck">
+                💡 Hint
+            </button>
+            <button class="send-btn" id="sendBtn">
+                <svg class="send-icon" viewBox="0 0 24 24">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Final Report (shown when done = true) -->
+        <div class="report-container" id="reportContainer">
+            <div class="report-header-card">
+                <div class="report-title-row">
+                    <h2 class="report-main-title" id="reportCandidateHeader">Sarah Johnson - Assessment Report</h2>
+                    <span class="day-badge" style="background-color: var(--primary-accent); border: none; color: var(--bg-darkest); font-weight: 700; padding: 6px 12px;">Completed</span>
+                </div>
+                <p class="report-summary-text" id="reportSummary">Summary loading...</p>
+            </div>
+
+            <!-- Dashboard Grid: Strengths, Gaps, Action items -->
+            <div class="report-grid">
+                <div class="report-section">
+                    <h3 class="report-section-header">
+                        <svg viewBox="0 0 24 24" style="width: 20px; height: 20px; fill: var(--secondary-accent);">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        Technical Strengths
+                    </h3>
+                    <ul class="bullets-list" id="strengthsList">
+                        <!-- Dynamically populated -->
+                    </ul>
+                </div>
+
+                <div class="report-section">
+                    <h3 class="report-section-header gaps">
+                        <svg viewBox="0 0 24 24" style="width: 20px; height: 20px; fill: var(--warning);">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                        </svg>
+                        Knowledge Gaps
+                    </h3>
+                    <ul class="bullets-list" id="gapsList">
+                        <!-- Dynamically populated -->
+                    </ul>
+                </div>
+            </div>
+
+            <div class="report-section" style="width: 100%;">
+                <h3 class="report-section-header next">
+                    <svg viewBox="0 0 24 24" style="width: 20px; height: 20px; fill: var(--text-light);">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H7c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.04-.42 1.99-1.07 2.75z"/>
+                    </svg>
+                    Actionable Next Steps
+                </h3>
+                <ul class="bullets-list" id="nextList">
+                    <!-- Dynamically populated -->
+                </ul>
+            </div>
+
+            <!-- Visualization Card -->
+            <div class="chart-card">
+                <h3 class="chart-header">Curriculum Competency Mapping</h3>
+                <div class="svg-chart-container" id="chartContainerDiv">
+                    <!-- Render dynamic SVG chart -->
+                </div>
+            </div>
+
+            <!-- Download PDF Button -->
+            <div class="report-actions">
+                <button class="btn download-btn" id="printReportBtn">
+                    <svg viewBox="0 0 24 24" style="fill: var(--bg-darkest); width: 18px; height: 18px;">
+                        <path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/>
+                    </svg>
+                    Download Report as PDF
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State management variables
+        let candidatesList = [];
+        let selectedCandidate = null;
+        let sessionId = "";
+        let currentTopicLogs = []; // Array tracking evaluated responses: { title, evaluations: [] }
+        let questionShownTime = Date.now();
+
+        // Fetch candidates list on load
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('data/candidates.json');
+                const data = await response.json();
+                candidatesList = data.candidates || [];
+                renderCandidates();
+            } catch (err) {
+                console.error("Failed to load candidates:", err);
+                alert("Error: Failed to fetch candidates.json. Ensure the server is running.");
+            }
+        });
+
+        // Elements mapping
+        const candidateListEl = document.getElementById('candidateList');
+        const startBtn = document.getElementById('startBtn');
+        const welcomeScreen = document.getElementById('welcomeScreen');
+        const chatContainer = document.getElementById('chatContainer');
+        const inputBar = document.getElementById('inputBar');
+        const progressHeader = document.getElementById('progressHeader');
+        const progressIndicator = document.getElementById('progressIndicator');
+        const dayBadge = document.getElementById('dayBadge');
+        const topicTitle = document.getElementById('topicTitle');
+        const progressFill = document.getElementById('progressFill');
+        const answerInput = document.getElementById('answerInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const hintBtn = document.getElementById('hintBtn');
+        
+        // Report Elements
+        const reportContainer = document.getElementById('reportContainer');
+        const reportCandidateHeader = document.getElementById('reportCandidateHeader');
+        const reportSummary = document.getElementById('reportSummary');
+        const strengthsList = document.getElementById('strengthsList');
+        const gapsList = document.getElementById('gapsList');
+        const nextList = document.getElementById('nextList');
+        const chartContainerDiv = document.getElementById('chartContainerDiv');
+        const printReportBtn = document.getElementById('printReportBtn');
+
+        // Render candidate cards in the sidebar
+        function renderCandidates() {
+            candidateListEl.innerHTML = '';
+            candidatesList.forEach((cand, index) => {
+                const card = document.createElement('div');
+                card.className = 'candidate-card';
+                card.innerHTML = `
+                    <div class="candidate-name">${cand.member.name}</div>
+                    <div class="candidate-role">${cand.member.jobRole} (${cand.member.yearsExperience} yrs exp)</div>
+                `;
+                card.addEventListener('click', () => {
+                    document.querySelectorAll('.candidate-card').forEach(c => c.classList.remove('active'));
+                    card.classList.add('active');
+                    selectedCandidate = cand;
+                    startBtn.disabled = false;
+                });
+                candidateListEl.appendChild(card);
+            });
+        }
+
+        // Start Interview handler
+        startBtn.addEventListener('click', async () => {
+            if (!selectedCandidate) return;
+            
+            // Setup session ID and states
+            sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+            currentTopicLogs = [];
+
+            // UI shifts
+            startBtn.disabled = true;
+            welcomeScreen.style.display = 'none';
+            reportContainer.style.display = 'none';
+            chatContainer.style.display = 'flex';
+            inputBar.style.display = 'flex';
+            progressHeader.style.display = 'flex';
+
+            chatContainer.innerHTML = ''; // Clean thread
+            
+            // Print Welcome bubble
+            appendAgentMessage(`Initializing assessment session for ${selectedCandidate.member.name}...`);
+            showTypingIndicator();
+
+            try {
+                // Post start message
+                const response = await fetch('http://127.0.0.1:8000/api/interview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sessionId: sessionId,
+                        candidate: selectedCandidate
+                    })
+                });
+
+                const data = await response.json();
+                hideTypingIndicator();
+                
+                // Set Welcome message
+                appendAgentMessage(data.reply);
+                updateProgress(data.progress);
+
+                // Start the interview first question trigger
+                showTypingIndicator();
+                const initRes = await fetch('http://127.0.0.1:8000/api/interview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sessionId: sessionId,
+                        message: "I am ready."
+                    })
+                });
+                const initData = await initRes.json();
+                hideTypingIndicator();
+                appendAgentMessage(initData.reply);
+                updateProgress(initData.progress);
+                questionShownTime = Date.now(); // Reset timer for first question
+                
+                // Focus input
+                answerInput.focus();
+
+            } catch (err) {
+                hideTypingIndicator();
+                appendAgentMessage("Error: Failed to communicate with the interview API server.");
+                console.error(err);
+            }
+        });
+
+        // Trigger message send
+        sendBtn.addEventListener('click', sendAnswer);
+        answerInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendAnswer();
+        });
+
+        async function sendAnswer() {
+            const answer = answerInput.value.trim();
+            if (!answer || sendBtn.disabled) return;
+
+            // Clear input and block interactions temporarily
+            answerInput.value = '';
+            answerInput.disabled = true;
+            sendBtn.disabled = true;
+            if (hintBtn) hintBtn.disabled = true;
+
+            // Append candidate answer bubble
+            appendCandidateMessage(answer);
+            showTypingIndicator();
+
+            const elapsed = (Date.now() - questionShownTime) / 1000;
+
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/interview', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sessionId: sessionId,
+                        message: answer,
+                        elapsedTime: elapsed
+                    })
+                });
+
+                const data = await response.json();
+                hideTypingIndicator();
+
+                // 1. Render the quality tag below the user's last message bubble
+                if (data.answerQuality) {
+                    appendQualityTag(data.answerQuality);
+                    // Add to analytics logs
+                    recordTopicEvaluation(data.progress, data.answerQuality);
+                }
+
+                // 2. Wait briefly before showing next question/report
+                setTimeout(() => {
+                    // Check if complete
+                    if (data.done) {
+                        progressHeader.style.display = 'none';
+                        chatContainer.style.display = 'none';
+                        inputBar.style.display = 'none';
+                        renderFinalReport(data.feedback);
+                    } else {
+                        appendAgentMessage(data.reply);
+                        updateProgress(data.progress);
+                        questionShownTime = Date.now(); // Reset timer for new question
+                        answerInput.disabled = false;
+                        sendBtn.disabled = false;
+                        if (hintBtn) hintBtn.disabled = false;
+                        answerInput.focus();
+                    }
+                }, 1000);
+
+            } catch (err) {
+                hideTypingIndicator();
+                appendAgentMessage("Error: Network failure during evaluation.");
+                console.error(err);
+                answerInput.disabled = false;
+                sendBtn.disabled = false;
+                if (hintBtn) hintBtn.disabled = false;
+            }
+        }
+
+        // Hint Button Listener
+        if (hintBtn) {
+            hintBtn.addEventListener('click', async () => {
+                if (hintBtn.disabled) return;
+                hintBtn.disabled = true;
+                sendBtn.disabled = true;
+                showTypingIndicator();
+
+                try {
+                    const response = await fetch('http://127.0.0.1:8000/api/interview', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            sessionId: sessionId,
+                            requestHint: true
+                        })
+                    });
+                    const data = await response.json();
+                    hideTypingIndicator();
+                    appendAgentMessage(data.reply);
+                    
+                    hintBtn.disabled = false;
+                    sendBtn.disabled = false;
+                    answerInput.focus();
+                } catch (err) {
+                    hideTypingIndicator();
+                    appendAgentMessage("Error: Failed to retrieve hint.");
+                    console.error(err);
+                    hintBtn.disabled = false;
+                    sendBtn.disabled = false;
+                }
+            });
+        }
+
+        // Track evaluation ratios per topic for final scoring
+        function recordTopicEvaluation(progress, quality) {
+            if (!progress) return;
+            const topicName = progress.topicTitle;
+            let topicLog = currentTopicLogs.find(t => t.title === topicName);
+            if (!topicLog) {
+                topicLog = { title: topicName, day: progress.day, evaluations: [] };
+                currentTopicLogs.push(topicLog);
+            }
+            topicLog.evaluations.push(quality);
+        }
+
+        // Append text message bubbles
+        function appendAgentMessage(text) {
+            const row = document.createElement('div');
+            row.className = 'message-row agent';
+            row.innerHTML = `<div class="message-bubble">${text}</div>`;
+            chatContainer.appendChild(row);
+            scrollChat();
+        }
+
+        function appendCandidateMessage(text) {
+            const row = document.createElement('div');
+            row.className = 'message-row candidate';
+            row.innerHTML = `
+                <div class="quality-wrapper">
+                    <div class="message-bubble">${text}</div>
+                </div>
+            `;
+            chatContainer.appendChild(row);
+            scrollChat();
+        }
+
+        function appendQualityTag(quality) {
+            const wrapper = chatContainer.lastElementChild.querySelector('.quality-wrapper');
+            if (!wrapper) return;
+            
+            const tag = document.createElement('div');
+            const q = quality.toLowerCase();
+            if (q === 'strong') {
+                tag.className = 'quality-tag strong';
+                tag.innerHTML = '✓ Strong answer';
+            } else if (q === 'wrong') {
+                tag.className = 'quality-tag wrong';
+                tag.innerHTML = '✗ Incorrect answer';
+            } else {
+                tag.className = 'quality-tag shallow';
+                tag.innerHTML = '→ Follow-up incoming';
+            }
+            wrapper.appendChild(tag);
+            scrollChat();
+        }
+
+        // Auto scrolling chat
+        function scrollChat() {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // Typing Indicator triggers
+        let typingIndicatorEl = null;
+
+        function showTypingIndicator() {
+            if (typingIndicatorEl) return;
+            
+            const row = document.createElement('div');
+            row.className = 'message-row agent';
+            row.id = 'typingBubble';
+            row.innerHTML = `
+                <div class="typing-indicator">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            `;
+            chatContainer.appendChild(row);
+            typingIndicatorEl = row;
+            scrollChat();
+        }
+
+        function hideTypingIndicator() {
+            if (typingIndicatorEl) {
+                typingIndicatorEl.remove();
+                typingIndicatorEl = null;
+            }
+        }
+
+        // Update progress bar details
+        function updateProgress(progress) {
+            if (!progress) return;
+            progressIndicator.innerText = `Topic ${progress.current}/${progress.total}`;
+            dayBadge.innerText = `Day ${progress.day}`;
+            topicTitle.innerText = progress.topicTitle;
+            
+            // Set fill width percentage
+            const percentage = (progress.current / progress.total) * 100;
+            progressFill.style.width = `${percentage}%`;
+        }
+
+        // Render dynamic SVG chart and reports
+        function renderFinalReport(feedback) {
+            reportCandidateHeader.innerText = `${selectedCandidate.member.name} - Evaluation Report`;
+            reportSummary.innerText = feedback.summary;
+
+            // Render list bullets
+            renderBullets(strengthsList, feedback.strengths);
+            renderBullets(gapsList, feedback.gaps);
+            renderBullets(nextList, feedback.next);
+
+            // Compute topic scores
+            const chartData = computeTopicScores();
+
+            // Render SVG chart
+            renderSvgChart(chartData);
+
+            reportContainer.style.display = 'flex';
+            startBtn.disabled = false; // Allow another run
+        }
+
+        function renderBullets(element, items) {
+            element.innerHTML = '';
+            items.forEach(item => {
+                const li = document.createElement('li');
+                li.innerText = item;
+                element.appendChild(li);
+            });
+        }
+
+        // Analyze topic logs to map technical proficiency scores
+        function computeTopicScores() {
+            // Default list matching Sarah/Alex selected topics if logs are empty (failsafe fallback)
+            if (currentTopicLogs.length === 0) {
+                return [
+                    { title: "Embeddings Explained", score: 50 },
+                    { title: "Vector Databases Overview", score: 80 },
+                    { title: "Retrieval & Matching Engine", score: 90 },
+                    { title: "Prompt Engineering", score: 65 },
+                    { title: "FastAPI Chatbot Backend", score: 85 }
+                ];
+            }
+
+            return currentTopicLogs.map(t => {
+                if (t.evaluations.length === 0) return { title: t.title, score: 50 };
+                
+                let score = 50;
+                const firstEval = t.evaluations[0].toLowerCase();
+                if (firstEval === 'strong') {
+                    score = 100;
+                } else if (firstEval === 'wrong') {
+                    score = 10;
+                } else if (t.evaluations.length > 1) {
+                    const secondEval = t.evaluations[1].toLowerCase();
+                    score = (secondEval === 'strong') ? 60 : 20;
+                } else {
+                    score = 20;
+                }
+                return { title: t.title, score: score };
+            });
+        }
+
+        // Generate Inline SVG Bar Chart
+        function renderSvgChart(data) {
+            const chartWidth = 800;
+            const chartHeight = data.length * 45 + 50;
+            const labelWidth = 240;
+            const barMaxWidth = 450;
+            
+            let svgContent = `
+                <svg width="100%" height="100%" viewBox="0 0 ${chartWidth} ${chartHeight}" style="background-color: transparent;">
+                    <!-- Definitions for Glowing gradients -->
+                    <defs>
+                        <linearGradient id="barGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#0A7075" />
+                            <stop offset="100%" stop-color="#0C969C" />
+                        </linearGradient>
+                        <filter id="glow" x="-10%" y="-10%" width="120%" height="120%">
+                            <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0C969C" flood-opacity="0.3"/>
+                        </filter>
+                    </defs>
+            `;
+
+            // Draw Y-Axis grid lines
+            for (let i = 1; i <= 4; i++) {
+                const xVal = labelWidth + (barMaxWidth * (i / 4));
+                svgContent += `
+                    <line x1="${xVal}" y1="10" x2="${xVal}" y2="${chartHeight - 40}" stroke="rgba(107, 163, 190, 0.15)" stroke-dasharray="4"/>
+                    <text x="${xVal}" y="${chartHeight - 15}" fill="var(--text-muted)" font-size="11" text-anchor="middle">${i * 25}%</text>
+                `;
+            }
+            svgContent += `
+                <text x="${labelWidth}" y="${chartHeight - 15}" fill="var(--text-muted)" font-size="11" text-anchor="middle">0%</text>
+                <line x1="${labelWidth}" y1="10" x2="${labelWidth}" y2="${chartHeight - 40}" stroke="rgba(107, 163, 190, 0.3)" />
+            `;
+
+            // Draw Bars and Labels
+            data.forEach((item, idx) => {
+                const yPos = idx * 45 + 20;
+                const barWidth = (item.score / 100) * barMaxWidth;
+                
+                svgContent += `
+                    <!-- Row Text Label -->
+                    <text x="${labelWidth - 15}" y="${yPos + 18}" fill="var(--text-light)" font-size="13" font-weight="500" text-anchor="end">${item.title}</text>
+                    
+                    <!-- Background Empty Track -->
+                    <rect x="${labelWidth}" y="${yPos}" width="${barMaxWidth}" height="24" rx="6" fill="rgba(39, 77, 96, 0.15)" stroke="rgba(107, 163, 190, 0.1)" stroke-width="1"/>
+                    
+                    <!-- Filled Score Bar -->
+                    <rect x="${labelWidth}" y="${yPos}" width="${Math.max(barWidth, 10)}" height="24" rx="6" fill="url(#barGrad)" filter="url(#glow)"/>
+                    
+                    <!-- Score Badge inside bar or next to it -->
+                    <text x="${labelWidth + Math.max(barWidth, 10) + 12}" y="${yPos + 17}" fill="var(--text-muted)" font-size="12" font-weight="600">${item.score}%</text>
+                `;
+            });
+
+            svgContent += `</svg>`;
+            chartContainerDiv.innerHTML = svgContent;
+        }
+
+        // Print Handler
+        printReportBtn.addEventListener('click', () => {
+            window.print();
+        });
+    </script>
+</body>
+</html>

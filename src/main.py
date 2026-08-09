@@ -5,6 +5,8 @@ import logging
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import google.generativeai as genai
@@ -16,7 +18,7 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("interview_agent")
 
-app = FastAPI(title="Interview Agent API", version="1.7.0")
+app = FastAPI(title="Interview Agent API", version="1.8.0")
 
 # Enable CORS for frontend integration
 app.add_middleware(
@@ -56,24 +58,25 @@ SYSTEM_PROMPT = (
 
 EVALUATION_SYSTEM_PROMPT = (
     "You are a senior technical interviewer evaluating a candidate's answer to an interview question.\n"
-    "Based on the curriculum topic's objectives and the candidate's response, classify the answer as either:\n"
+    "Based on the curriculum topic's objectives and the candidate's response, classify the answer into exactly one of these three categories:\n"
     "- STRONG: The answer is complete, accurate, demonstrates real understanding, or provides valid reasoning.\n"
-    "- SHALLOW: The answer is extremely brief, vague, avoids details, or demonstrates a clear lack of depth/understanding.\n\n"
-    "Your response must begin with either 'STRONG' or 'SHALLOW' (case-insensitive) on the first line, followed by a new line with a brief, 1-sentence explanation of why you made this judgment.\n"
+    "- WRONG: The answer is factually incorrect, contains direct technical errors, or describes incorrect tools/concepts.\n"
+    "- SHALLOW: The answer is extremely brief, vague, gibberish/nonsense (e.g., 'ccc', 'asdf'), off-topic, or avoids technical details.\n\n"
+    "Your response must begin with either 'STRONG', 'WRONG', or 'SHALLOW' (case-insensitive) on the first line, followed by a new line with a brief, 1-sentence explanation of why you made this judgment.\n"
 )
 
 FEEDBACK_SYSTEM_PROMPT = (
     "You are a senior technical interviewer compiling a final evaluation report for an AI/software engineering candidate.\n"
-    "Based on the full transcript of the interview (topics, questions asked, and candidate answers), you must produce a detailed, candidate-specific feedback report.\n"
+    "Based on the full transcript of the interview (topics, questions asked, candidate answers, and their evaluations), you must produce a detailed, candidate-specific feedback report.\n"
     "Your response must be a single, valid JSON object containing exactly the following keys:\n"
     "{\n"
-    "  \"summary\": \"A concise 2-3 sentence overview of their overall performance and suitability, referencing their actual answers.\",\n"
+    "  \"summary\": \"A concise 2-3 sentence overview of their overall performance and suitability, referencing their actual answers. If they ended early, explicitly state that the interview was ended early by the candidate.\",\n"
     "  \"strengths\": [\"List of 2-3 specific technical areas or concepts they demonstrated solid mastery in, referencing details from their answers.\"],\n"
-    "  \"gaps\": [\"List of 2-3 specific technical gaps, misconceptions, or areas they struggled to elaborate on, based on their answers.\"],\n"
+    "  \"gaps\": [\"List of 2-3 specific technical gaps, misconceptions, or areas they struggled to elaborate on, or got factually WRONG. For any factually WRONG answers in the transcript, explicitly and precisely describe what was incorrect in their response (do not use generic filler).\"],\n"
     "  \"next\": [\"List of 2-3 concrete, actionable next steps or learning suggestions tailored to their performance.\"]\n"
     "}\n\n"
     "Guidelines:\n"
-    "1. Do NOT use boilerplate or generic sentences like 'Demonstrated baseline participation'. Mention specific concepts they discussed (e.g. Reciprocal Rank Fusion, all-MiniLM-L6-v2, ChromaDB, etc.).\n"
+    "1. Do NOT use boilerplate or generic sentences. Mention specific concepts discussed.\n"
     "2. Output ONLY the JSON object. Do not include any markdown fences, explanation text, or preambles. Output clean JSON."
 )
 
@@ -123,6 +126,8 @@ class InterviewRequest(BaseModel):
     sessionId: str
     candidate: Optional[Candidate] = None
     message: Optional[str] = None
+    elapsedTime: Optional[float] = None
+    requestHint: Optional[bool] = None
 
 class Feedback(BaseModel):
     summary: str
@@ -277,6 +282,14 @@ def generate_interview_question(topic: Dict[str, Any], candidate: Candidate) -> 
 
 def evaluate_candidate_answer(topic: Dict[str, Any], question: str, answer: str) -> Dict[str, str]:
     """Evaluates the candidate's answer against the topic objectives. Resilient to failures."""
+    # Strict gibberish/nonsense checks before invoking API
+    clean_ans = answer.strip().lower()
+    if len(clean_ans) < 4 or clean_ans in ["ccc", "asdf", "qwer", "xyz", "none", "no idea", "dunno", "hello", "hi"]:
+        return {
+            "status": "SHALLOW",
+            "reason": "Candidate provided a gibberish, empty-of-substance, or off-topic response."
+        }
+
     if not GEMINI_API_KEY or not gemini_eval_model:
         return {"status": "STRONG", "reason": "API fallback evaluation due to missing configuration."}
 
@@ -295,7 +308,9 @@ def evaluate_candidate_answer(topic: Dict[str, Any], question: str, answer: str)
         status = content[0].strip().upper()
         reason = "\n".join(content[1:]).strip() if len(content) > 1 else ""
         
-        if "SHALLOW" in status:
+        if "WRONG" in status:
+            status = "WRONG"
+        elif "SHALLOW" in status:
             status = "SHALLOW"
         else:
             status = "STRONG"
@@ -322,8 +337,8 @@ def generate_follow_up_question(topic: Dict[str, Any], candidate: Candidate, pre
         f"Tools covered: {tools_str}\n"
         f"Objectives: \n{objectives_str}\n\n"
         f"Previously Asked Question: {previous_question}\n"
-        f"Candidate's Shallow Answer: {previous_answer}\n\n"
-        f"Please generate ONE targeted, conversational, deeper follow-up question about this topic. The question should probe their understanding further, address the gaps in their shallow response, or ask them to elaborate on details."
+        f"Candidate's Answer: {previous_answer}\n\n"
+        f"Please generate ONE targeted, conversational, deeper follow-up question about this topic. The question should probe their understanding further, address the gaps in their response, or ask them to elaborate on details."
     )
 
     try:
@@ -332,6 +347,30 @@ def generate_follow_up_question(topic: Dict[str, Any], candidate: Candidate, pre
     except Exception as e:
         logger.error(f"Error calling Gemini API for follow-up question: {e}")
         return f"Could you elaborate further on your previous point regarding {topic['title']}?"
+
+
+def generate_hint(topic: Dict[str, Any], question: str) -> str:
+    """Uses Google's Gemini API to generate a helpful hint for the current question without giving away the answer."""
+    if not GEMINI_API_KEY:
+        return f"Hint: Think about how you would implement or use {', '.join(topic.get('tools', []))} for this topic."
+
+    prompt = (
+        f"Topic: {topic['title']}\n"
+        f"Objectives: {', '.join(topic.get('objectives', []))}\n"
+        f"Question Asked: {question}\n\n"
+        f"The candidate is stuck and needs a hint. Generate a helpful, encouraging hint or nudge in the right direction. "
+        f"Do NOT give away the direct answer. Keep it to 1-2 concise sentences."
+    )
+    try:
+        model = genai.GenerativeModel(
+            model_name="gemini-3.1-flash-lite",
+            system_instruction="You are a helpful, encouraging technical interviewer. Provide a subtle hint to help the candidate answer the question without giving it away."
+        )
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception as e:
+        logger.error(f"Error generating hint from Gemini: {e}")
+        return f"Hint: Think about how you would implement or use {', '.join(topic.get('tools', []))} for this topic."
 
 
 def generate_dynamic_feedback(session_state: Dict[str, Any]) -> Feedback:
@@ -347,7 +386,7 @@ def generate_dynamic_feedback(session_state: Dict[str, Any]) -> Feedback:
             f"Turn {idx + 1} [{ans['title']} - {q_type} Question]:\n"
             f"Question Asked: {ans['question']}\n"
             f"Candidate Answer: {ans['answer']}\n"
-            f"Evaluation: {ans['evaluation']['status']}\n"
+            f"Evaluation: {ans['evaluation']['status']} (Reason: {ans['evaluation']['reason']})\n"
         )
     
     transcript_str = "\n".join(transcript_lines)
@@ -360,6 +399,9 @@ def generate_dynamic_feedback(session_state: Dict[str, Any]) -> Feedback:
         f"{transcript_str}\n\n"
         f"Please generate the feedback JSON matching the requested keys."
     )
+    
+    if session_state.get("ended_early"):
+        user_prompt += "\nIMPORTANT: The candidate chose to end the interview early. Please explicitly state that they chose to exit early in the feedback summary."
 
     text_response = ""
     if GEMINI_API_KEY:
@@ -397,13 +439,39 @@ def generate_dynamic_feedback(session_state: Dict[str, Any]) -> Feedback:
     # Fallback response generator (used if API key is missing or call fails)
     strong_topics = list(set([a["title"] for a in answers if a["evaluation"]["status"] == "STRONG"]))
     shallow_topics = list(set([a["title"] for a in answers if a["evaluation"]["status"] == "SHALLOW"]))
+    wrong_topics = list(set([a["title"] for a in answers if a["evaluation"]["status"] == "WRONG"]))
     
+    summary_txt = f"The candidate {candidate.member.name} completed the interview."
+    if session_state.get("ended_early"):
+        summary_txt = f"The interview was ended early by candidate {candidate.member.name}."
+        
+    gaps_list = []
+    for t in wrong_topics:
+        # Find the wrong answer details in our logs
+        wrong_ans = next((a for a in answers if a["title"] == t and a["evaluation"]["status"] == "WRONG"), None)
+        details = f": '{wrong_ans['answer']}' (Factually incorrect)" if wrong_ans else ""
+        gaps_list.append(f"Demonstrated factually WRONG understanding of {t}{details}.")
+    for t in shallow_topics:
+        gaps_list.append(f"Demonstrated shallower understanding of: {t}.")
+        
     return Feedback(
-        summary=f"The candidate {candidate.member.name} completed the interview answering {len(answers)} topics.",
+        summary=summary_txt,
         strengths=[f"Demonstrated good baseline participation on: {t}" for t in strong_topics] if strong_topics else ["Walked through the technical topics."],
-        gaps=[f"Showed shallower understanding of: {t}" for t in shallow_topics] if shallow_topics else ["No major gaps flagged."],
-        next=[f"Deep dive into: {t}" for t in shallow_topics] if shallow_topics else ["Ready for review."]
+        gaps=gaps_list if gaps_list else ["No major gaps flagged."],
+        next=[f"Deep dive into: {t}" for t in (shallow_topics + wrong_topics)] if (shallow_topics + wrong_topics) else ["Ready for review."]
     )
+
+
+def is_exit_intent(message: str) -> bool:
+    """Helper to detect if a candidate's message expresses an intent to quit/end the interview."""
+    if not message:
+        return False
+    msg_lower = message.lower()
+    exit_phrases = ["quit", "end interview", "stop", "leave", "exit", "end the interview", "stop the interview", "i want to quit", "i want to leave"]
+    for phrase in exit_phrases:
+        if phrase in msg_lower:
+            return True
+    return False
 
 
 @app.post("/api/interview", response_model=InterviewResponse)
@@ -418,7 +486,6 @@ def handle_interview_turn(request: InterviewRequest):
 
     # 1. New Session (candidate details provided)
     if request.candidate is not None:
-        # EDGE CASE 6: Session reset warning if sessionId is used to "start" a second time
         if session_id in sessions:
             logger.warning(f"Session {session_id} already exists. Resetting session state for a new interview.")
             
@@ -432,7 +499,9 @@ def handle_interview_turn(request: InterviewRequest):
             "current_index": 0,
             "current_question_asked": None,
             "follow_up_asked": False,
-            "answers_collected": []
+            "answers_collected": [],
+            "warmup_done": False,
+            "ended_early": False
         }
 
         # Print/log the selected topics clearly
@@ -444,8 +513,7 @@ def handle_interview_turn(request: InterviewRequest):
             print(f"  [{idx + 1}] Day {t['day']}: {t['title']} - {status_desc}")
         print("-" * 50 + "\n")
 
-        # Also log via logger
-        logger.info(f"Session {session_id} initialized with {len(selected_topics)} topics for candidate {request.candidate.member.name}.")
+        logger.info(f"Session {session_id} initialized with {len(selected_topics)} topics.")
 
         first_topic = selected_topics[0]
         progress_info = InterviewProgress(
@@ -476,12 +544,78 @@ def handle_interview_turn(request: InterviewRequest):
     current_idx = session_state["current_index"]
     candidate = session_state["candidate"]
 
-    # Allow force-ending the interview via "end"
-    if user_msg.lower() == "end":
-        logger.info(f"Session {session_id} manually ended by candidate.")
+    # GRACEFUL EXIT: Check for quit intent in message
+    if is_exit_intent(user_msg) or user_msg.lower() == "end":
+        logger.info(f"Session {session_id} ended early via exit intent.")
+        session_state["ended_early"] = True
         return generate_completion_response(session_state, answer_quality=None)
 
-    # Check if we have not asked the question for the current topic yet
+    # HINTS ON DELAY: check for explicit request or delay > 60 seconds
+    is_hint_requested = request.requestHint is True or (request.elapsedTime is not None and request.elapsedTime > 60)
+    if is_hint_requested and session_state["current_question_asked"] is not None:
+        logger.info(f"Generating hint for session {session_id}.")
+        current_topic = topic_queue[current_idx]
+        hint = generate_hint(current_topic, session_state["current_question_asked"])
+        
+        progress_info = InterviewProgress(
+            current=current_idx + 1,
+            total=len(topic_queue),
+            day=current_topic["day"],
+            topicTitle=current_topic["title"]
+        )
+        return InterviewResponse(
+            reply=hint,
+            done=False,
+            progress=progress_info,
+            answerQuality=None
+        )
+
+    # FRIENDLY OPENING: Ask friendly warm-up before entering technical topics
+    if not session_state.get("warmup_done"):
+        if session_state["current_question_asked"] is None:
+            # Ask the friendly warm-up question
+            question = f"To start off, could you tell me a bit about your background and what you enjoyed most in the cohort?"
+            session_state["current_question_asked"] = question
+            
+            current_topic = topic_queue[current_idx]
+            progress_info = InterviewProgress(
+                current=1,
+                total=len(topic_queue),
+                day=current_topic["day"],
+                topicTitle=current_topic["title"]
+            )
+            return InterviewResponse(
+                reply=question,
+                done=False,
+                progress=progress_info,
+                answerQuality=None
+            )
+        else:
+            # Candidate answered the warm-up question.
+            # Record it (not graded) and transition to technical topic 1
+            session_state["warmup_answer"] = user_msg
+            session_state["warmup_done"] = True
+            
+            current_topic = topic_queue[current_idx]
+            question = generate_interview_question(current_topic, candidate)
+            session_state["current_question_asked"] = question
+            session_state["follow_up_asked"] = False
+            logger.info(f"Asked primary question for session {session_id}, Day {current_topic['day']}: {question[:60]}...")
+            
+            progress_info = InterviewProgress(
+                current=current_idx + 1,
+                total=len(topic_queue),
+                day=current_topic["day"],
+                topicTitle=current_topic["title"]
+            )
+            return InterviewResponse(
+                reply=question,
+                done=False,
+                progress=progress_info,
+                answerQuality=None
+            )
+
+    # Standard technical Q&A loop
     if session_state["current_question_asked"] is None:
         if current_idx < len(topic_queue):
             current_topic = topic_queue[current_idx]
@@ -505,7 +639,6 @@ def handle_interview_turn(request: InterviewRequest):
         else:
             return generate_completion_response(session_state, answer_quality=None)
             
-    # If a question has already been asked, user_msg is the answer to that question
     else:
         current_topic = topic_queue[current_idx]
         asked_question = session_state["current_question_asked"]
@@ -518,10 +651,10 @@ def handle_interview_turn(request: InterviewRequest):
                 "reason": "Candidate provided an empty or whitespace-only response."
             }
         else:
-            # Evaluate the answer
+            # Evaluate the answer (includes nonsense/gibberish filter inside)
             eval_result = evaluate_candidate_answer(current_topic, asked_question, user_msg)
             
-        status = eval_result["status"]
+        status = eval_result["status"] # STRONG, SHALLOW, or WRONG
         reason = eval_result["reason"]
         
         logger.info(f"Evaluation for session {session_id}, Day {current_topic['day']}: {status}. Reason: {reason}")
@@ -541,8 +674,8 @@ def handle_interview_turn(request: InterviewRequest):
         })
         
         # Decide next step:
-        # If shallow and no follow-up was asked yet on this topic, ask a follow-up
-        if status == "SHALLOW" and not is_follow_up:
+        # If shallow/wrong and no follow-up was asked yet on this topic, ask a follow-up
+        if status in ["SHALLOW", "WRONG"] and not is_follow_up:
             session_state["follow_up_asked"] = True
             
             # Generate and ask the follow-up question
@@ -563,7 +696,7 @@ def handle_interview_turn(request: InterviewRequest):
                 reply=follow_up_question,
                 done=False,
                 progress=progress_info,
-                answerQuality="shallow"
+                answerQuality=status.lower()
             )
             
         # If strong or a follow-up has already been asked, move to the next topic in queue
@@ -608,3 +741,19 @@ def generate_completion_response(session_state: Dict[str, Any], answer_quality: 
         progress=None,
         answerQuality=answer_quality
     )
+
+
+# Serve static data folder
+app.mount("/data", StaticFiles(directory=os.path.join(BASE_DIR, "data")), name="data")
+
+# Serve index.html SPA
+@app.get("/")
+def get_index():
+    index_path = os.path.join(BASE_DIR, "src", "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    # Fallback to project root
+    root_index = os.path.join(BASE_DIR, "index.html")
+    if os.path.exists(root_index):
+        return FileResponse(root_index)
+    raise HTTPException(status_code=404, detail="index.html not found")
