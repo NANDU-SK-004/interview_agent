@@ -8,7 +8,12 @@ SkillHire is an AI-powered technical interview simulator designed to conduct and
 ---
 
 ## 1. What It Does
-SkillHire conducts adaptive technical assessments by matching questions against a candidate's historical cohort performance. The simulator analyzes candidate answers in real-time, routes to deeper follow-ups when responses are vague or shallow, tracks factually incorrect responses, and generates a structured competency mapping report detailing strengths, gaps, and recommendations.
+SkillHire conducts adaptive technical assessments by matching questions against a candidate's historical cohort performance. 
+
+Key features include:
+* **Candidate Entry Portal**: Candidates access the system using their name and a unique Candidate ID (e.g. name `Ronaldo` with ID `CAND-007`). The system checks validity in real-time before initiating the assessment.
+* **Personalized Assessment Routing**: The simulator selects curriculum-aligned topics based on historical candidate metrics, routes to deep technical follow-up questions when candidate answers are shallow or vague, and intercepts gibberish inputs.
+* **Performance Analysis Report**: Generates a structured candidate competency evaluation card containing summary feedback, detailed lists of strengths/gaps, actionable recommendations, and a Curriculum Competency radar chart sync'd to answer evaluations.
 
 ---
 
