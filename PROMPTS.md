@@ -262,3 +262,30 @@ After making these changes, confirm:
 - The frontend still works correctly using the new /api/candidates endpoint (no functionality broken)
 - Deliberately trigger an unhandled error and confirm it returns a clean message, not a stack trace
 - Show me the final CORS config
+
+
+
+Add a lightweight entry screen before the candidate selection/interview flow. This is a simple "candidate portal entry," NOT a real authentication system — keep it minimal.
+
+REQUIREMENTS:
+1. Before the existing candidate list screen, add a new entry screen (after the splash screen finishes, if the splash still exists) with:
+   - A "Your Name" text input
+   - A "Candidate ID" text input (e.g. CAND-001)
+   - An "Enter" button
+
+2. On submit, call the existing GET /api/candidates endpoint (or a similar lookup) to check if the entered Candidate ID exists in candidates.json.
+   - If it matches: greet the person using the name they typed (e.g. "Welcome, Sarah!") and proceed directly into the interview flow for that matched candidate — skip the old candidate-list-browsing screen entirely, since they've now identified themselves.
+   - If it doesn't match: show a simple, friendly inline error like "Candidate ID not found. Please check and try again." — no complex retry logic, no lockouts, no password-style security theater.
+
+3. Keep this extremely simple — no session tokens, no persistent login, no password field. This is just a lightweight identity lookup, since real authentication is explicitly out of scope for this project.
+
+4. Preserve everything else exactly as-is: the splash screen animation, the light theme, progress bar, quality tags, typing animation, radar chart, PDF export, hint button, and end interview button. This is purely adding one new entry screen before the interview begins.
+
+5. Use the existing color palette (#FFFFFF, #F7F9FA, #F1F4F6, #0F1B24, #5B6B76, #0A7075, #0C969C, #E9EDEF, #E1E6E9) and keep the same clean, professional, flat visual style as the rest of the app.
+
+After implementing, test:
+- Entering a valid name + a real Candidate ID (e.g. CAND-001) → should greet by name and start that candidate's interview
+- Entering an invalid/nonexistent Candidate ID → should show the friendly error, not crash
+- Confirm the rest of the interview flow (questions, evaluation, feedback, chart, PDF) still works exactly as before
+
+Show me a screenshot of the new entry screen once built.
