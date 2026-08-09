@@ -288,4 +288,4 @@ After implementing, test:
 - Entering an invalid/nonexistent Candidate ID → should show the friendly error, not crash
 - Confirm the rest of the interview flow (questions, evaluation, feedback, chart, PDF) still works exactly as before
 
-Show me a screenshot of the new entry screen once built.
+Show me a screenshot of the new entry screen once built
