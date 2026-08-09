@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SkillHire - Candidate Assessment Hub</title>
+    <title>SkillHire</title>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1139,7 +1139,7 @@
                         progressHeader.style.display = 'none';
                         chatContainer.style.display = 'none';
                         inputBar.style.display = 'none';
-                        renderFinalReport(data.feedback);
+                        renderFinalReport(data.feedback, data.evaluations);
                     } else {
                         appendAgentMessage(data.reply);
                         updateProgress(data.progress);
@@ -1224,7 +1224,7 @@
                     progressHeader.style.display = 'none';
                     chatContainer.style.display = 'none';
                     inputBar.style.display = 'none';
-                    renderFinalReport(data.feedback);
+                    renderFinalReport(data.feedback, data.evaluations);
                 } catch (err) {
                     hideTypingIndicator();
                     appendAgentMessage("Error: Failed to end the session gracefully.");
@@ -1343,7 +1343,7 @@
         }
 
         // Render dynamic SVG chart and reports
-        function renderFinalReport(feedback) {
+        function renderFinalReport(feedback, evaluations) {
             reportCandidateHeader.innerText = `${selectedCandidate.member.name} - SkillHire Evaluation Report`;
             reportSummary.innerText = feedback.summary;
 
@@ -1352,8 +1352,8 @@
             renderBullets(gapsList, feedback.gaps);
             renderBullets(nextList, feedback.next);
 
-            // Compute topic scores
-            const chartData = computeTopicScores();
+            // Compute topic scores based on backend evaluations
+            const chartData = computeTopicScores(evaluations);
 
             // Render SVG chart
             renderSvgChart(chartData);
@@ -1371,33 +1371,26 @@
             });
         }
 
-        // Analyze topic logs to map technical proficiency scores
-        function computeTopicScores() {
-            // Default list matching Sarah/Alex selected topics if logs are empty (failsafe fallback)
-            if (currentTopicLogs.length === 0) {
-                return [
-                    { title: "Embeddings Explained", score: 50 },
-                    { title: "Vector Databases Overview", score: 80 },
-                    { title: "Retrieval & Matching Engine", score: 90 },
-                    { title: "Prompt Engineering", score: 65 },
-                    { title: "FastAPI Chatbot Backend", score: 85 }
-                ];
+        // Analyze topic logs from backend to map technical proficiency scores
+        function computeTopicScores(evaluationsFromBackend) {
+            if (!evaluationsFromBackend || evaluationsFromBackend.length === 0) {
+                return [];
             }
 
-            return currentTopicLogs.map(t => {
-                if (t.evaluations.length === 0) return { title: t.title, score: 50 };
-                
+            return evaluationsFromBackend.map(t => {
                 let score = 50;
-                const firstEval = t.evaluations[0].toLowerCase();
-                if (firstEval === 'strong') {
-                    score = 100;
-                } else if (firstEval === 'wrong') {
-                    score = 10;
-                } else if (t.evaluations.length > 1) {
-                    const secondEval = t.evaluations[1].toLowerCase();
-                    score = (secondEval === 'strong') ? 60 : 20;
-                } else {
-                    score = 20;
+                const evals = t.evaluations.map(e => e.toLowerCase());
+                
+                if (evals.includes('wrong')) {
+                    score = 15; // Low score for factually wrong answers
+                } else if (evals.includes('shallow')) {
+                    if (evals[evals.length - 1] === 'strong') {
+                        score = 60; // Corrected to strong on follow-up
+                    } else {
+                        score = 45; // Remained shallow
+                    }
+                } else if (evals.includes('strong')) {
+                    score = 95; // Strong answer
                 }
                 return { title: t.title, score: score };
             });

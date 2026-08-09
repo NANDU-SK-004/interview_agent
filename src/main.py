@@ -147,6 +147,7 @@ class InterviewResponse(BaseModel):
     feedback: Optional[Feedback] = None
     progress: Optional[InterviewProgress] = None
     answerQuality: Optional[str] = None
+    evaluations: Optional[List[Dict[str, Any]]] = None
 
 
 # Session State Store
@@ -753,12 +754,32 @@ def handle_interview_turn(request: InterviewRequest):
 def generate_completion_response(session_state: Dict[str, Any], answer_quality: Optional[str] = None) -> InterviewResponse:
     """Helper to return the final feedback report when the interview finishes."""
     feedback = generate_dynamic_feedback(session_state)
+    
+    # Compile actual technical topic evaluations list
+    topic_evals = []
+    for ans in session_state.get("answers_collected", []):
+        title = ans["title"]
+        status = ans["evaluation"]["status"]
+        day = ans["day"]
+        
+        # Check if already added
+        existing = next((x for x in topic_evals if x["title"] == title), None)
+        if existing:
+            existing["evaluations"].append(status)
+        else:
+            topic_evals.append({
+                "title": title,
+                "day": day,
+                "evaluations": [status]
+            })
+            
     return InterviewResponse(
         reply="Interview completed. Thank you for your time!",
         done=True,
         feedback=feedback,
         progress=None,
-        answerQuality=answer_quality
+        answerQuality=answer_quality,
+        evaluations=topic_evals
     )
 
 
